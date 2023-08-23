@@ -129,8 +129,6 @@ def inference(model, filelist, device, model_name, entropy_estimation = False):
 
         if entropy_estimation is False:
             data =  model.compress(x_padded)
-
-            #out_dec = model.decompress_torcach(data)
             out_dec = model.decompress(data["strings"], data["shape"])
     
         else:

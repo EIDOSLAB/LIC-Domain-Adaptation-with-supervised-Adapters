@@ -299,14 +299,12 @@ def main(argv):
 
 
 
-    if args.training_policy == "quantization" or args.training_policy == "entire" or args.training_policy == "quantization_lrp":
+    if args.training_policy == "quantization" or args.training_policy == "entire":
         quantization_policy = None
         criterion = RateDistortionLoss(lmbda=args.lmbda)
     elif args.training_policy == "mse":
         quantization_policy = None
         criterion =  DistorsionLoss()
-        #if args.dim_adapter != 0:
-        #    net.modify_adapter(args, device) 
         net = net.to(device)
 
 
