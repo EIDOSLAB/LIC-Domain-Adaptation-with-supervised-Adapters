@@ -1,1 +1,1 @@
-# eidos-github-template
+# OVerfitted Adapter for Image Compression (OVAdIC)
