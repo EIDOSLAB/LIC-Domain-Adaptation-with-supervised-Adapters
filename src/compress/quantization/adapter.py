@@ -46,7 +46,7 @@ class Adapter(nn.Module):
         self.standard_deviation = standard_deviation
         self.mean = mean 
         
-        print("-----> std----> ",self.standard_deviation)
+
 
 
         self.AdapterModule = self.define_adapter()
@@ -68,7 +68,7 @@ class Adapter(nn.Module):
             return ZeroLayer()
 
         elif self.dim_adapter == 1:
-            print("entro qua con adapter di dimensione 1")
+
             convv =  nn.Conv2d(self.in_ch, self.out_ch, kernel_size=1, stride=1, bias=self.bias, groups=self.groups)
             #nn.init.normal_(convv.weight, mean=self.mean, std=self.standard_deviation)
             nn.init.zeros_(convv.bias)

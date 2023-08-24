@@ -70,8 +70,9 @@ class WACNNStanh(WACNN):
     def modify_adapter(self, args, device):
         print("sto modificando l'adapter!")
         self.dim_adapter = args.dim_adapter 
-        self.adapter = nn.ModuleList( Adapter(in_ch = 320, out_ch =320, dim_adapter = args.dim_adapter, mean = args.mean, standard_deviation= args.std, kernel_size = args.kernel_size) for i in range(10))
+        self.adapter = nn.ModuleList( Adapter(in_ch = 32, out_ch =32, dim_adapter = args.dim_adapter, mean = args.mean, standard_deviation= args.std, kernel_size = args.kernel_size) for i in range(10))
         self.adapter.to(device)
+        self.pars_adapter()
 
 
 
