@@ -4,16 +4,20 @@ from compress.entropy_models.weight_entropy_module import WeightEntropyModule
 import re 
 import torch 
 import operator
-from compress.models.utils import encode_latent
+#from compress.models.utils import encode_latent
 
 class QuantizedModelWrapper:
     """Wrapper for Quantized Model"""
 
-    def __init__(self, model, w_ent: WeightEntropyModule, regex: str) -> None:
+    def __init__(self, model,w_ent: WeightEntropyModule, regex: str) -> None:
         # regex: regex of keys to update
         self.model = copy.deepcopy(model)
-        for p in self.model.parameters():
-            p.requires_grad = False
+
+        #self.model.modify_adapter(args,device)
+
+        #for name,p in self.model.named_parameters():
+          
+            #p.requires_grad = False
 
         self.w_ent = w_ent
         self.regex = regex
@@ -46,9 +50,17 @@ class QuantizedModelWrapper:
 
             params_dict[name] = p
 
+
+
+        
+
         self.params_init: dict = copy.deepcopy(params_dict)
+
+
         for p in self.params_init.values():
             p.requires_grad = False
+
+    
 
     def report_params(self):
         n_params_total: int = 0
@@ -59,7 +71,8 @@ class QuantizedModelWrapper:
 
             if re.match(self.regex, key) is not None:
                 n_params_update += n_param
-                print(key, n_param)
+
+
 
         print(f"#updating params/#total params: {n_params_update}/{n_params_total}")
 
@@ -72,12 +85,26 @@ class QuantizedModelWrapper:
         self.model.entropy_bottleneck.eval()
         self.model.gaussian_conditional.eval()
 
+    
+    def freeze_net(self):
+        for name,p in self.model.named_parameters():
+            p.requires_grad = False  
+
+
+                 
+
+
+    def train_adapter(self):
+        self.model.pars_adapter(re_grad = True)
+
     def to(self, device):
         self.model.to(device)
         self.w_ent.to(device)
         for key in self.params_init.keys():
             self.params_init[key] = self.params_init[key].to(device)
 
+
+    """
     @torch.no_grad()
     def compress(self, x_pad: torch.Tensor, y=None, z=None) -> dict:
         if y is not None and z is not None:
@@ -121,7 +148,7 @@ class QuantizedModelWrapper:
 
             else:
                 p_qua.copy_(p_init)
-
+    """
     def update_parameters(self, model) -> dict:
         """update model_qua parameters
 

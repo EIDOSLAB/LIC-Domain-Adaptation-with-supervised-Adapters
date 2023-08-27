@@ -10,6 +10,7 @@ from compress.entropy_models import  AdaptedEntropyBottleneck, AdaptedGaussianCo
 #from compress.entropy_models.adaptive_entropy_models import EntropyBottleneckSoS
 import torch.nn.functional as F
 from compress.quantization.adapter  import Adapter
+import copy
 # From Balle's tensorflow compression examples
 SCALES_MIN = 0.11
 SCALES_MAX = 256
@@ -35,7 +36,6 @@ class WACNNStanh(WACNN):
 
 
         if self.factorized_configuration is None:
-            print("entro qua che altrimenti me godo!!!!")
             self.entropy_bottleneck = EntropyBottleneck(N)
         else:
             self.entropy_bottleneck = AdaptedEntropyBottleneck(N,      
@@ -61,6 +61,7 @@ class WACNNStanh(WACNN):
 
 
 
+
     def count_ad_pars(self):
         cc = 0
         for p in self.adapter.parameters(): 
@@ -68,11 +69,12 @@ class WACNNStanh(WACNN):
         return cc
 
     def modify_adapter(self, args, device):
-        print("sto modificando l'adapter!")
         self.dim_adapter = args.dim_adapter 
-        self.adapter = nn.ModuleList( Adapter(in_ch = 32, out_ch =32, dim_adapter = args.dim_adapter, mean = args.mean, standard_deviation= args.std, kernel_size = args.kernel_size) for i in range(10))
-        self.adapter.to(device)
-        self.pars_adapter()
+        
+        
+        self.adapter_trasforms = nn.ModuleList( Adapter(in_ch = 32, out_ch =32, dim_adapter = args.dim_adapter, mean = args.mean, standard_deviation= args.std, kernel_size = args.kernel_size) for i in range(10))
+        self.adapter_trasforms.to(device)
+        self.pars_adapter(re_grad = True)
 
 
 
@@ -244,6 +246,7 @@ class WACNNStanh(WACNN):
             "likelihoods": {"y": y_likelihoods, "z": z_likelihoods},
             "y_hat": y_hat,
             "y": y,
+            "z":z,
             "y_teacher":y_teacher,
             "y_hat_no_mean": y_hat_no_mean
 
@@ -336,7 +339,7 @@ class WACNNStanh(WACNN):
         y_string = encoder.flush()
         y_strings.append(y_string)
 
-        return {"strings": [y_strings, z_strings], "shape": z.size()[-2:]}
+        return {"strings": [y_strings, z_strings], "shape": z.size()[-2:], "z":z,"y":y }
     
 
 
@@ -395,7 +398,25 @@ class WACNNStanh(WACNN):
 
         return {"x_hat": x_hat}
     
+    def __deepcopy__(self, memo):
+        # Crea una nuova istanza del modello
+        new_model = self.__class__(gaussian_configuration= self.gaussian_configuration, factorized_configuration= None, dim_adapter = self.dim_adapter  )
+        # Copia i parametri dei moduli
+        new_model = new_model.to("cuda")
+        
+        
+        states_d  = copy.deepcopy(self.state_dict(), memo)
+        del states_d["entropy_bottleneck._quantized_cdf"]
+        del states_d["entropy_bottleneck._cdf_length"]
+        del states_d["entropy_bottleneck._offset"]
+        del states_d["gaussian_conditional._offset"]
+        del states_d["gaussian_conditional._quantized_cdf"]
+        del states_d["gaussian_conditional._cdf_length"]
+        del states_d["gaussian_conditional.scale_table"]
 
+                                  
+        new_model.load_state_dict(states_d)
+        return new_model
 
     def compress_torcach(self,x): 
 

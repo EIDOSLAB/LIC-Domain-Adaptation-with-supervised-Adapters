@@ -31,8 +31,8 @@ class Adapter(nn.Module):
                         stride = 1,
                         kernel_size = 1,
                         groups = 1, 
-                        bias = True,
-                        standard_deviation = 0.01,
+                        bias = False,
+                        standard_deviation = 0.00,
                         mean = 0.0):
         super().__init__()
 
@@ -54,6 +54,8 @@ class Adapter(nn.Module):
 
 
 
+    def reinitialize_adapter(self, mean, std):
+        nn.init.normal_(self.AdapterModule.weight, mean=mean, std=std)
 
 
     def initialization(self,m): 
@@ -70,9 +72,11 @@ class Adapter(nn.Module):
         elif self.dim_adapter == 1:
 
             convv =  nn.Conv2d(self.in_ch, self.out_ch, kernel_size=1, stride=1, bias=self.bias, groups=self.groups)
-            #nn.init.normal_(convv.weight, mean=self.mean, std=self.standard_deviation)
-            nn.init.zeros_(convv.bias)
-            nn.init.zeros_(convv.weight)
+            nn.init.normal_(convv.weight, mean=self.mean, std=self.standard_deviation)
+            if self.bias:
+                nn.init.zeros_(convv.bias)
+            
+
             return convv
 
         elif self.dim_adapter > 2:

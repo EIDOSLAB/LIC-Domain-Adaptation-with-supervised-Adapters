@@ -2,7 +2,7 @@ from .cnn_latent_adapter import WACNNStanh
 import torch.nn as nn
 from compressai.layers import GDN
 from compressai.models.utils import  deconv
-from compress.layers import  Win_noShift_Attention_Adapter
+from compress.layers.layers import  Win_noShift_Attention_Adapter
 
 
 

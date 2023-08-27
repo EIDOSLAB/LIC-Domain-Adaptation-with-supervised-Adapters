@@ -201,7 +201,7 @@ class AdaptedEntropyModel(nn.Module):
         2 - ad the means  
         """
         inputs = inputs.to(dtype)
-        outputs =  copy.deepcopy(inputs)
+        outputs =  copy.deepcopy(inputs.detach())
         #print("valori unici di input 1: ",torch.unique(inputs))
         #print("la mappa è   ", self.sos.map_cdf_sos)
         map_int_to_float = self.sos.map_cdf_sos
@@ -285,11 +285,11 @@ class AdaptedEntropyModel(nn.Module):
             output_cdf[i,:] = self.cdf[indexes[i].item(),:]
         byte_stream = torchac.encode_float_cdf(output_cdf, symbols, check_input_bounds=True)
 
-        c = torchac.decode_float_cdf(output_cdf, byte_stream)
-        if torchac.decode_float_cdf(output_cdf, byte_stream).equal(symbols) is False:
-            raise ValueError("L'output Gaussiano codificato è diverso, qualcosa non va!")
-        else:
-            print("l'immagine è ok!")
+        #c = torchac.decode_float_cdf(output_cdf, byte_stream)
+        #if torchac.decode_float_cdf(output_cdf, byte_stream).equal(symbols) is False:
+        #    raise ValueError("L'output Gaussiano codificato è diverso, qualcosa non va!")
+        #else:
+        #    print("l'immagine è ok!")
         return byte_stream, output_cdf  , shape_symbols
 
 
@@ -604,7 +604,13 @@ class AdaptedGaussianConditional(AdaptedEntropyModel):
         y_hat = y_hat.reshape(shape)
         y_hat = y_hat.permute(*perms[1]).contiguous()
 
+
+        y_hat2 = copy.deepcopy(y_hat.detach())
         y_hat = adapter(y_hat) + y_hat  # noi vogliamo che questo approcci a quello del modello migliore!
+
+
+        equal = torch.allclose(y_hat2, y_hat)
+        #print("--> ",equal)
 
         if means is not None: 
             y_hat = y_hat + means 
@@ -680,16 +686,16 @@ class AdaptedGaussianConditional(AdaptedEntropyModel):
                 means = means.reshape(1, 1, -1) # reshape values
         else:
             values = x
-        print("lo shape di values prima è: ",values.shape)
+        #print("lo shape di values prima è: ",values.shape)
         x = self.quantize(values, "symbols", means = means)  
-        print("lo shape di x prima è: ",x.shape)
+        #print("lo shape di x prima è: ",x.shape)
 
         if perms is not None:
             print("mannaggia a satana io non devo entrare qua!!!")
             x = x.reshape(shape)
             x = x.permute(*perms[1]).contiguous()
 
-        print("lo shape di x dopo il primo quantiza è: ",x.shape,"    ",indexes.shape)
+        #print("lo shape di x dopo il primo quantiza è: ",x.shape,"    ",indexes.shape)
 
         return super().compress(x, indexes) 
 
