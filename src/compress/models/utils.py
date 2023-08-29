@@ -184,9 +184,11 @@ def get_model(args,device, N = 192, M = 320, factorized_configuration = None, ga
         net = models[args.model](N = N, M = M, factorized_configuration = factorized_configuration, gaussian_configuration = gaussian_configuration, dim_adapter = args.dim_adapter)
         
         if args.pret_checkpoint is not None:
-            state_dict = load_pretrained(torch.load(args.pret_checkpoint, map_location=device)['state_dict'])
+            #state_dict = load_pretrained(torch.load(args.pret_checkpoint, map_location=device)['state_dict'])
+            state_dict = load_pretrained(torch.load(args.pret_checkpoint, map_location=device))
             #print("faccio il check dei cumulative weights: ",net.gaussian_conditional.sos.cum_w)
             #print("prima di fare l'update abbiamo che: ",net.h_a[0].weight[0])
+            """
             del state_dict["gaussian_conditional._offset"] 
             del state_dict["gaussian_conditional._quantized_cdf"] 
             del state_dict["gaussian_conditional._cdf_length"] 
@@ -194,6 +196,7 @@ def get_model(args,device, N = 192, M = 320, factorized_configuration = None, ga
             del state_dict["entropy_bottleneck._offset"]
             del state_dict["entropy_bottleneck._quantized_cdf"]
             del state_dict["entropy_bottleneck._cdf_length"]
+            """
             net.load_state_dict(state_dict)
         net.to(device)       
         net.update()

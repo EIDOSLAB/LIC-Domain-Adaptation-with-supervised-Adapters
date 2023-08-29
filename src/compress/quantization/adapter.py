@@ -70,7 +70,7 @@ class Adapter(nn.Module):
             return ZeroLayer()
 
         elif self.dim_adapter == 1:
-
+            print("sono entrato qua nella definizione")
             convv =  nn.Conv2d(self.in_ch, self.out_ch, kernel_size=1, stride=1, bias=self.bias, groups=self.groups)
             nn.init.normal_(convv.weight, mean=self.mean, std=self.standard_deviation)
             if self.bias:
@@ -79,18 +79,18 @@ class Adapter(nn.Module):
 
             return convv
 
-        elif self.dim_adapter > 2:
-            model =  nn.Sequential(
-                    nn.Conv2d(
+        elif self.dim_adapter == 2:
+
+            model = nn.Sequential(
+                nn.Conv2d(
                     self.in_ch,
                     self.dim_adapter,
-                    kernel_size= self.kernel_size,
+                    kernel_size=1,
                     bias=self.bias,
                     stride=self.stride,
                     groups=self.groups,
                 ),
-                nn.ReLU(inplace=True),
-                nn.Conv2d(self.dim_adapter, self.out_ch, kernel_size=self.kernel_size, bias=self.bias, groups=self.groups),
+                nn.Conv2d(self.dim_adapter, self.out_ch, kernel_size=1, bias=self.bias, groups=self.groups),
             )
 
             model.apply(self.initialization())

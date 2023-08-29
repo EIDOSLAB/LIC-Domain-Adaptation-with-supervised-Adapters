@@ -580,40 +580,40 @@ class AdaptedGaussianConditional(AdaptedEntropyModel):
         perms = [perm, inv_perm]
 
 
-        if means is not None:
-            values = x - means 
-        else: 
-            values = x
+        #if means is not None:
+        #    values = values #x - means 
+        #else: 
+        #    values = x
 
 
-
+        values = x
 
         values =  values.permute(*perms[0]).contiguous() # flatten y and call it values
         shape = values.size() 
         values = values.reshape(1, 1, -1) # reshape values
-        #if means is not None:   
-            #means = means.permute(*perms[0]).contiguous()
-            #means = means.reshape(1, 1, -1)#.to(x.device)     
+        if means is not None:   
+            means = means.permute(*perms[0]).contiguous()
+            means = means.reshape(1, 1, -1)#.to(x.device)     
 
 
 
 
-        y_hat = self.quantize(values, "training" if training else "dequantize", means = None)
+        y_hat = self.quantize(values, "training" if training else "dequantize", means = means)
         #y_hat = self.quantize(x, "training" if training else "dequantize", means = means, perms = True)
         
         y_hat = y_hat.reshape(shape)
         y_hat = y_hat.permute(*perms[1]).contiguous()
 
 
-        y_hat2 = copy.deepcopy(y_hat.detach())
-        y_hat = adapter(y_hat) + y_hat  # noi vogliamo che questo approcci a quello del modello migliore!
+        #y_hat2 = copy.deepcopy(y_hat.detach())
+        #y_hat = adapter(y_hat) + y_hat  # noi vogliamo che questo approcci a quello del modello migliore!
 
 
-        equal = torch.allclose(y_hat2, y_hat)
+        #equal = torch.allclose(y_hat2, y_hat)
         #print("--> ",equal)
 
         if means is not None: 
-            y_hat = y_hat + means 
+            y_hat = y_hat #+ means 
 
 
 
@@ -629,7 +629,7 @@ class AdaptedGaussianConditional(AdaptedEntropyModel):
 
 
         if means is not None: 
-            values = values + means
+            values = values #+ means
 
         likelihood = self._likelihood(values, scales, means = means)#.to(x.device)
         if self.use_likelihood_bound:

@@ -163,7 +163,6 @@ class WACNNStanh(WACNN):
             z_hat, z_likelihoods = self.entropy_bottleneck(z, training = training)
         else:
             z_hat, z_likelihoods = self.entropy_bottleneck(z)
-
             z_offset = self.entropy_bottleneck._get_medians()
             z_tmp = z - z_offset
             z_hat = ste_round(z_tmp) + z_offset

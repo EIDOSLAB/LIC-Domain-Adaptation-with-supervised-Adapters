@@ -36,7 +36,7 @@ class AverageMeter:
         self.avg = self.sum / self.count
 
 
-def train_one_epoch(model, criterion, train_dataloader, optimizer, aux_optimizer, epoch, clip_max_norm ,counter, sos, training_epoch):
+def train_one_epoch(model, criterion, train_dataloader, optimizer, aux_optimizer, epoch, clip_max_norm ,counter, sos,not_adapters):
     model.train()
     device = next(model.parameters()).device
 
@@ -55,13 +55,12 @@ def train_one_epoch(model, criterion, train_dataloader, optimizer, aux_optimizer
     for i, d in enumerate(train_dataloader):
         counter += 1
         d = d.to(device)
-
         optimizer.zero_grad()
         if aux_optimizer is not None:
             aux_optimizer.zero_grad()
 
         if sos:
-            out_net = model(d, training = True)
+            out_net = model(d, training = not_adapters)
 
         else: 
             out_net = model(d)
@@ -70,6 +69,7 @@ def train_one_epoch(model, criterion, train_dataloader, optimizer, aux_optimizer
         out_criterion = criterion(out_net, d)
 
         out_criterion["loss"].backward()
+        optimizer.step()
 
         loss.update(out_criterion["loss"].clone().detach())
         mse_loss.update(out_criterion["mse_loss"].clone().detach())
@@ -78,7 +78,7 @@ def train_one_epoch(model, criterion, train_dataloader, optimizer, aux_optimizer
 
         if clip_max_norm > 0:
             torch.nn.utils.clip_grad_norm_(model.parameters(), clip_max_norm)
-        optimizer.step()
+
 
 
         if aux_optimizer is not None:
@@ -86,7 +86,7 @@ def train_one_epoch(model, criterion, train_dataloader, optimizer, aux_optimizer
             aux_loss.backward()
             aux_optimizer.step()
 
-        if i % 750 == 0:
+        if i % 100 == 0:
             print(
                 f"Train epoch {epoch}: ["
                 f"{i*len(d)}/{len(train_dataloader.dataset)}"
@@ -270,10 +270,10 @@ def test_epoch(epoch, test_dataloader, model, criterion, sos, valid):
 
 
 
+from compressai.ops import compute_padding
 
 
-
-def compress_with_ac(model,  test_dataloader, device, epoch):
+def compress_with_ac(model,  filelist, device, epoch):
     #model.update(None, device)
     print("ho finito l'update")
     bpp_loss = AverageMeter()
@@ -282,17 +282,31 @@ def compress_with_ac(model,  test_dataloader, device, epoch):
 
     
     with torch.no_grad():
-        for i,d in enumerate(test_dataloader): 
-            d = d.to(device)
-            data =  model.compress(d)
+        for i,d in enumerate(filelist): 
+
+            x = read_image(d).to(device)
+            x = x.unsqueeze(0) 
+            h, w = x.size(2), x.size(3)
+            pad, unpad = compute_padding(h, w, min_div=2**6)  # pad to allow 6 strides of 2
+            x_padded = F.pad(x, pad, mode="constant", value=0)
+
+
+            data =  model.compress(x_padded)
             out_dec = model.decompress(data["strings"], data["shape"])
-            psnr_val.update(compute_psnr(d, out_dec["x_hat"]))
-            mssim_val.update(compute_msssim(d, out_dec["x_hat"]))
-            print("lo shape decoded è-------------------------------> ",compute_psnr(d, out_dec["x_hat"]))
+    
+            out_dec["x_hat"] = F.pad(out_dec["x_hat"], unpad)
+
+            out_dec["x_hat"].clamp_(0.,1.)     
+
+            psnr_val.update(compute_psnr(x, out_dec["x_hat"]))
+            mssim_val.update(compute_msssim(x, out_dec["x_hat"]))
+            
             size = out_dec['x_hat'].size()
             num_pixels = size[0] * size[2] * size[3]
             bpp = sum(len(s[0]) for s in data["strings"]) * 8.0 / num_pixels
             bpp_loss.update(bpp)
+
+            print("image: ",d,": ",bpp," ",compute_psnr(x, out_dec["x_hat"]))
 
 
                     
