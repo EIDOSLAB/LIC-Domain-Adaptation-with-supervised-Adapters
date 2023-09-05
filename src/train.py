@@ -18,7 +18,7 @@ import sys
 import wandb
 import torch
 import torch.optim as optim
-from compress.training import train_one_epoch, test_epoch,  compress_with_ac, RateDistortionLoss , AdapterLoss, DistorsionLoss
+from compress.training import train_one_epoch, test_epoch,  compress_with_ac, RateDistortionLoss , AdapterLoss, DistorsionLoss, KnowledgeDistillationLoss
 from torch.utils.data import DataLoader
 from torchvision import transforms
 import os 
@@ -39,19 +39,23 @@ from compress.models.utils import get_model
 
 
 def handle_trainable_pars(net, args):
-    if args.training_policy == "adapter" or args.training_policy == "mse": 
+    if args.training_policy in ("adapter","mse","kd"): 
         net.freeze_net()
         net.pars_adapter(re_grad = True)
+        net.pars_decoder(re_grad = args.unfreeze_decoder)
         # aggiungo l'adapter e lo sfreezo!
         #  
 
-    elif args.training_policy == "quantization" or args.training_policy == "controlled":
+    elif args.training_policy == "quantization":
         print("io sono qui dentro? dovrei esserlo per forza")
         net.freeze_net()
         net.unfreeze_quantizer()
         net.pars_adapter(re_grad =False) 
+        net.parse_hyperprior( re_grad_ha = args.unfreeze_ha, re_grad_hma = args.unfreeze_hma, re_grad_hsa = args.unfreeze_hsa)
+
+
     elif args.training_policy == "quantization_lrp":
-        print("io sono qui dentro? dovrei esserlo per forza")
+        print("io sono qui dentro? dovrei esserlo per forza!")
         net.freeze_net()
         net.unfreeze_quantizer() 
         net.unfreeze_lrp()
@@ -152,48 +156,36 @@ def main(argv):
         torch.manual_seed(args.seed)
         random.seed(args.seed)
     
-    train_transforms = transforms.Compose(
-        [transforms.RandomCrop(args.patch_size), transforms.ToTensor()]
-    )
 
-    valid_transforms = transforms.Compose(
-        [transforms.RandomCrop(args.patch_size), transforms.ToTensor()]
-    )
-
-
-    train_dataset = ImageFolder(args.dataset, split="train", transform=train_transforms, num_images=args.num_images_train)
-    valid_dataset = ImageFolder(args.dataset, split="test", transform=valid_transforms, num_images=args.num_images_val)
-    #test_dataset = ImageFolder(args.dataset, split="test", transform=test_transforms)sss
-    test_dataset = TestKodakDataset(data_dir="/scratch/dataset/kodak")
     device = "cuda" if  torch.cuda.is_available() else "cpu"
-    valid_dataloader = DataLoader(
-        valid_dataset,
-        batch_size=args.batch_size,
-        num_workers=args.num_workers,
-        shuffle=False,
-        pin_memory=(device == "cuda"),
-    )
-
 
 
 
     
 
-    train_dataloader = DataLoader(
-        train_dataset,
-        batch_size=args.batch_size,
-        num_workers=args.num_workers,
-        shuffle=True,
-        pin_memory=(device == "cuda"),
-    )
+    train_transforms = transforms.Compose([transforms.RandomCrop(args.patch_size), transforms.ToTensor()])
+    train_dataset = ImageFolder(args.dataset, split="train", transform=train_transforms, num_images=args.num_images_train)
+    train_dataloader = DataLoader(train_dataset,batch_size=args.batch_size,num_workers=args.num_workers,shuffle=True, pin_memory=(device == "cuda"),)
 
-    test_dataloader = DataLoader(
-        test_dataset,
-        batch_size=1,
-        num_workers=args.num_workers,
-        shuffle=False,
-        pin_memory=(device == "cuda"),
-    )
+    valid_transforms = transforms.Compose([transforms.RandomCrop(args.patch_size), transforms.ToTensor()])
+    valid_dataset = ImageFolder(args.dataset, split="test", transform=valid_transforms, num_images=args.num_images_val)
+    valid_dataloader = DataLoader(valid_dataset,batch_size=args.batch_size,num_workers=args.num_workers,shuffle=False,pin_memory=(device == "cuda"),)
+
+
+
+
+    #test_dataset = ImageFolder(args.dataset, split="test", transform=test_transforms)sss
+    test_dataset = TestKodakDataset(data_dir="/scratch/dataset/kodak")
+    test_dataloader = DataLoader(test_dataset, batch_size=1,num_workers=args.num_workers,shuffle=False,pin_memory=(device == "cuda"),)
+    
+
+    
+
+
+
+    
+
+
 
 
     if args.model == "base":
@@ -202,7 +194,7 @@ def main(argv):
     else:
         factorized_configuration , gaussian_configuration = configure_latent_space_policy(args, device, baseline = False)
     print("gaussian configuration----- -fdddguuggffxssssxxx------>: ",gaussian_configuration)
-    print("factorized configuration------>ceeccccàsssààcccc->: ",factorized_configuration)
+    print("factorized configuration------>ceeccccssààcccc->: ",factorized_configuration)
 
 
 
@@ -212,6 +204,33 @@ def main(argv):
     #lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", factor=0.3, patience=4)
 
     net, baseline = get_model(args,device, factorized_configuration = factorized_configuration, gaussian_configuration = gaussian_configuration )
+
+
+    if args.training_policy == "kd":
+
+
+
+        teacher_net = models["base"](N = args.dims_n, M = args.dims_m)
+        checkpoint = torch.load(args.pret_checkpoint_teacher, map_location=device)
+        if "entropy_bottleneck._quantized_cdf" in list(checkpoint.keys()):
+            del checkpoint["entropy_bottleneck._offset"]
+            del checkpoint["entropy_bottleneck._quantized_cdf"]
+            del checkpoint["entropy_bottleneck._cdf_length"]
+        if "gaussian_conditional._quantized_cdf" in list(checkpoint.keys()):
+            del checkpoint["gaussian_conditional._offset"]
+            del checkpoint["gaussian_conditional._quantized_cdf"]
+            del checkpoint["gaussian_conditional._cdf_length"]
+            del checkpoint["gaussian_conditional.scale_table"]
+            
+            
+
+                
+        teacher_net.load_state_dict(checkpoint)
+        teacher_net.to(device) 
+        teacher_net.update()
+        
+
+
     net = net.to(device)
 
 
@@ -226,35 +245,42 @@ def main(argv):
 
 
     if args.training_policy == "quantization":
-        quantization_policy = None
+
         criterion = RateDistortionLoss(lmbda=args.lmbda)
         not_adapters = True
+    elif args.training_policy == "kd":
+        criterion = KnowledgeDistillationLoss(teacher_net,lmbda = args.lmbda)
+        not_adapters = False
+
+        if args.dim_adapter != 0 and args.model == "latent":
+            net.modify_adapter(args, device) 
+            net = net.to(device)
     elif args.training_policy == "mse":
-        quantization_policy = None
+
         criterion =  DistorsionLoss()
         not_adapters = False
 
 
         # devo modificare il modello, al momento l'adapter non ha parametri allenabili 
-        if args.dim_adapter != 0:
+        if args.dim_adapter != 0 and args.model == "latent":
             net.modify_adapter(args, device) 
             net = net.to(device)
 
 
 
     elif args.training_policy == "adapter" or args.training_policy == "only_lrp": # in questo caso alleno solo l'adapter 
-        quantization_policy = None
-        criterion = AdapterLoss(quantization_policy)
+
+        criterion = AdapterLoss()
         print("se sono entrato qua va benissimmo!")
         not_adapters = False
         
         # devo modificare il modello, al momento l'adapter non ha parametri allenabili 
-        if args.dim_adapter != 0:
+        if args.dim_adapter != 0 and args.model == "latent":
             net.modify_adapter(args, device) 
             net = net.to(device)
             
     else:
-        print("ALLENIAMO TUTTO")        
+       
         quantization_policy = None
         criterion = RateDistortionLoss(lmbda=args.lmbda)
         not_adapters = True
@@ -321,16 +347,17 @@ def main(argv):
         print(" trainable parameters: ",model_tr_parameters)
         print(" freeze parameterss: ", model_fr_parameters)
         if baseline is False:
-            print(" freezed adapter parameterers: ",sum(p.numel() for p in net.adapter_trasforms.parameters() if p.requires_grad == False))
-            print(" trainable adapter parameterers: ",sum(p.numel() for p in net.adapter_trasforms.parameters() if p.requires_grad))
+            print(" freezed adapter parameterers: ",sum(p.numel() for p in net.adapter.parameters() if p.requires_grad == False))
+            print(" trainable adapter parameterers: ",sum(p.numel() for p in net.adapter.parameters() if p.requires_grad))
         start = time.time()
         
 
-        counter = train_one_epoch(net, criterion, train_dataloader, optimizer, aux_optimizer,epoch, args.clip_max_norm,counter,sos, not_adapters)
+        if model_tr_parameters > 0:
+            counter = train_one_epoch(net, criterion, train_dataloader, optimizer, aux_optimizer,epoch, 1,counter,sos, not_adapters)
  
-        loss_valid = test_epoch(epoch, valid_dataloader, net, criterion, sos, valid = True)
+        loss_valid = test_epoch(epoch, valid_dataloader, net, criterion, sos, valid = True,not_adapters=not_adapters)
         
-        loss = test_epoch(epoch, test_dataloader, net, criterion, sos, valid = False)
+        loss = test_epoch(epoch, test_dataloader, net, criterion, sos, valid = False, not_adapters=not_adapters)
         lr_scheduler.step(loss_valid)
 
 
@@ -339,7 +366,7 @@ def main(argv):
         filename, filename_best =  create_savepath(args, epoch)
 
 
-        if epoch%5==0 or epoch == 150:
+        if epoch > 10 and (epoch%50==0 or epoch == 599):
             net.update()
             compress_with_ac(net,filelist, device, epoch_enc)
             epoch_enc += 1
@@ -445,7 +472,7 @@ def main(argv):
 
 if __name__ == "__main__":
     #KnowledgeDistillationImageCompression
-    wandb.init(project="DCC-Knowldge-distillation", entity="albertopresta")   
+    wandb.init(project="Knowldge-distillation", entity="albertopresta")   
     main(sys.argv[1:])
 
 

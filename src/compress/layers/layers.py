@@ -157,6 +157,7 @@ class Win_noShift_Attention_Adapter(Win_noShift_Attention):
         dim_adapter: int = 1,
         groups: int = 1,
         position: str = "last",
+        stride: int = 1
     ):
         """Win_noShift_Attention with adapters.
 
@@ -167,7 +168,7 @@ class Win_noShift_Attention_Adapter(Win_noShift_Attention):
         super().__init__(dim, num_heads, window_size, shift_size)
         self.position = position
         if self.position == "last":
-            self.adapter = define_adapter(dim, dim, dim_adapter=dim_adapter, groups=groups, bias=False)
+            self.adapter = define_adapter(dim, dim, dim_adapter=dim_adapter, groups=groups, bias=False, stride = stride)
             self.adapter.apply(init_adapter_layer)
         elif self.position in {"attn", "attnattn"}:
             self.conv_b[0] = WinBaseAttentionAdapter(

@@ -24,13 +24,13 @@ def get_scale_table(min=SCALES_MIN, max=SCALES_MAX, levels=SCALES_LEVELS):
 
 
 class WACNNStanh(WACNN): 
-    def __init__(self, gaussian_configuration,N=192, M=320, factorized_configuration = None,  dim_adapter = 0, **kwargs):
+    def __init__(self, gaussian_configuration,N=192, M=320, factorized_configuration = None,  dim_adapter = 0,stride = 1, **kwargs):
         super().__init__(N = N , M = M,**kwargs)
         
         self.factorized_configuration = factorized_configuration
         self.gaussian_configuration = gaussian_configuration
         self.dim_adapter = dim_adapter 
-        
+        self.stride = stride 
 
 
 
@@ -54,8 +54,8 @@ class WACNNStanh(WACNN):
 
         
         
-        self.adapter_trasforms  = nn.ModuleList( Adapter(32, 32 , dim_adapter= self.dim_adapter) for i in range(10) )
-        
+        #self.adapter_trasforms  = nn.ModuleList( Adapter(32, 32 , dim_adapter= self.dim_adapter) for i in range(10) )
+        self.adapter = Adapter(320, 320 , dim_adapter= self.dim_adapter, stride = self.stride )
         self.pars_adapter()
         
 
@@ -70,33 +70,33 @@ class WACNNStanh(WACNN):
 
     def modify_adapter(self, args, device):
         self.dim_adapter = args.dim_adapter 
-        
-        
-        self.adapter_trasforms = nn.ModuleList( Adapter(in_ch = 32, out_ch =32, dim_adapter = args.dim_adapter, mean = args.mean, standard_deviation= args.std, kernel_size = args.kernel_size) for i in range(10))
-        self.adapter_trasforms.to(device)
+        self.adapter = Adapter(320, 320 , dim_adapter= self.dim_adapter, standard_deviation= args.std, mean= args.mean, bias = args.bias, kernel_size = args.kernel_size, stride = args.adapter_stride, padding = args.padding )
+        #self.adapter_trasforms = nn.ModuleList( Adapter(in_ch = 32, out_ch =32, dim_adapter = args.dim_adapter, mean = args.mean, standard_deviation= args.std, kernel_size = args.kernel_size) for i in range(10))
+        #self.adapter_trasforms.to(device)
+        self.adapter.to(device)
         self.pars_adapter(re_grad = True)
 
 
 
+    def parse_hyperprior(self, re_grad_ha = False, re_grad_hma = False, re_grad_hsa = False):
+        for n,p in self.h_a.named_parameters():
+            p.requires_grad = re_grad_ha  
+        for n,p in self.h_mean_s.named_parameters():
+            p.requires_grad = re_grad_hma
+        for n,p in self.h_scale_s.named_parameters():
+            p.requires_grad = re_grad_hsa
 
-    def compute_gap(self, inputs, y_hat, gaussian, perms = None):
-        values =  inputs.permute(*perms[0]).contiguous() # flatten y and call it values
-        values = values.reshape(1, 1, -1) # reshape values      
-        y_hat_p =  y_hat.permute(*perms[0]).contiguous() # flatten y and call it values
-        y_hat_p = y_hat_p.reshape(1, 1, -1) # reshape values     
-        with torch.no_grad():    
-            if gaussian: 
-                out = self.gaussian_conditional.sos(values,-1) 
+
+
+    def pars_decoder(self,re_grad = False, st = -1):
+        
+
+        for i,lev in enumerate(self.g_s):
+            if i > st:
+                for n,p in lev.named_parameters():
+                    p.requires_grad = re_grad
             else:
-                out = self.entropy_bottleneck.sos(values, -1)
-            # calculate f_tilde:  
-            f_tilde = F.mse_loss(values, y_hat_p)
-            # calculat f_hat
-            f_hat = F.mse_loss(values, out)
-            gap = torch.abs(f_tilde - f_hat)
-        return gap
-
-
+                print("pass ",i)
 
     def freeze_net(self):
         for n,p in self.named_parameters():
@@ -122,8 +122,8 @@ class WACNNStanh(WACNN):
             p.requires_grad = False
 
     def pars_adapter(self, re_grad = False): 
-        for single_adapter in self.adapter_trasforms:
-            for p in single_adapter.parameters(): 
+        #for single_adapter in self.adapter_trasforms:
+        for p in self.adapter.parameters(): 
                 p.requires_grad = re_grad  
                 
 
@@ -198,7 +198,7 @@ class WACNNStanh(WACNN):
             scale = scale[:, :, :y_shape[0], :y_shape[1]]
 
 
-            y_hat_slice, y_slice_likelihood = self.gaussian_conditional(y_slice, training = training, scales = scale, means = mu, adapter = self.adapter_trasforms[slice_index])  
+            y_hat_slice, y_slice_likelihood = self.gaussian_conditional(y_slice, training = training, scales = scale, means = mu, adapter = None) #self.adapter_trasforms[slice_index])  
 
             # y_hat_slice ha la media, togliamola per la parte di loss riservata all'adapter 
             y_hat_slice_no_mean = y_hat_slice - mu
@@ -234,7 +234,7 @@ class WACNNStanh(WACNN):
 
         y_hat_no_mean = torch.cat(y_hat_no_mean, dim = 1)
         # da mettere qua l'adapter? 
-        #y_hat = self.adapter(y_hat, training = training) + y_hat  #con di_adapter = 0 questo non ha ripercussioni sul risultato (controllare)
+        y_hat = self.adapter(y_hat) + y_hat  #con di_adapter = 0 questo non ha ripercussioni sul risultato (controllare)
 
        
         x_hat = self.g_s(y_hat)
@@ -255,8 +255,136 @@ class WACNNStanh(WACNN):
         if scale_table is None:
             scale_table = get_scale_table()
         updated = self.gaussian_conditional.update_scale_table(scale_table, force=force)
-        updated |= super().update(force=force)
+        updated |= super().update()
         return updated
+
+
+
+    def encode_latent(self, x): 
+        y = self.g_a(x)
+        y_shape = y.shape[2:]
+        z = self.h_a(y)
+
+        z_hat, _ = self.entropy_bottleneck(z, training = False)
+
+        latent_scales = self.h_scale_s(z_hat)
+        latent_means = self.h_mean_s(z_hat)
+
+        y_slices = y.chunk(self.num_slices, 1)
+        y_hat_slices = []
+
+        latent_scales = self.h_scale_s(z_hat)
+        latent_means = self.h_mean_s(z_hat)
+
+        y_slices = y.chunk(self.num_slices, 1)
+        y_hat_slices = []
+
+        for slice_index, y_slice in enumerate(y_slices):
+            support_slices = (y_hat_slices if self.max_support_slices < 0 else y_hat_slices[:self.max_support_slices])
+            mean_support = torch.cat([latent_means] + support_slices, dim=1)
+            mu = self.cc_mean_transforms[slice_index](mean_support)
+            mu = mu[:, :, :y_shape[0], :y_shape[1]]
+            scale_support = torch.cat([latent_scales] + support_slices, dim=1)
+            scale = self.cc_scale_transforms[slice_index](scale_support)
+            scale = scale[:, :, :y_shape[0], :y_shape[1]]
+            y_hat_slice, _ = self.gaussian_conditional(y_slice, training = False, scales = scale, means = mu, adapter = None) # solo per mostrare la likelihood
+
+            lrp_support = torch.cat([mean_support, y_hat_slice], dim=1)
+            lrp = self.lrp_transforms[slice_index](lrp_support)
+            lrp = 0.5 * torch.tanh(lrp)
+            y_hat_slice += lrp
+            y_hat_slices.append(y_hat_slice)
+
+        y_hat = torch.cat(y_hat_slices, dim=1)   
+        return y_hat
+
+
+
+    def forward_adapter(self, x): 
+
+
+
+
+        y = self.g_a(x)
+        y_shape = y.shape[2:]
+        z = self.h_a(y)
+
+
+        z_hat, z_likelihoods = self.entropy_bottleneck(z, training = False)
+
+
+        latent_scales = self.h_scale_s(z_hat)
+        latent_means = self.h_mean_s(z_hat)
+
+        y_slices = y.chunk(self.num_slices, 1)
+        y_hat_slices = []
+        y_likelihood = []
+
+        latent_scales = self.h_scale_s(z_hat)
+        latent_means = self.h_mean_s(z_hat)
+
+
+
+
+        y_slices = y.chunk(self.num_slices, 1)
+        y_hat_slices = []
+
+
+
+
+
+
+        for slice_index, y_slice in enumerate(y_slices):
+
+            support_slices = (y_hat_slices if self.max_support_slices < 0 else y_hat_slices[:self.max_support_slices])
+
+            mean_support = torch.cat([latent_means] + support_slices, dim=1)
+            mu = self.cc_mean_transforms[slice_index](mean_support)
+            mu = mu[:, :, :y_shape[0], :y_shape[1]]
+
+            scale_support = torch.cat([latent_scales] + support_slices, dim=1)
+            scale = self.cc_scale_transforms[slice_index](scale_support)
+            scale = scale[:, :, :y_shape[0], :y_shape[1]]
+
+            #y_hat_slice, y_slice_likelihood = self.gaussian_conditional(y_slice, training = training, scales = scale, means = mu, adapter = None)
+            #y_q_slice_encoded = self.gaussian_conditional.quantize(y_slice, "symbols", mu, permutation= True)
+            #y_hat_slice = self.gaussian_conditional.dequantize(y_q_slice_encoded, mu)  # inverse_map(y_q_slice) + mu
+
+
+            y_hat_slice, y_slice_likelihood = self.gaussian_conditional(y_slice, training = False, scales = scale, means = mu, adapter = None) # solo per mostrare la likelihood
+
+
+            y_likelihood.append(y_slice_likelihood)
+
+            lrp_support = torch.cat([mean_support, y_hat_slice], dim=1)
+            lrp = self.lrp_transforms[slice_index](lrp_support)
+            lrp = 0.5 * torch.tanh(lrp)
+            y_hat_slice += lrp
+            y_hat_slices.append(y_hat_slice)
+
+
+        y_likelihoods = torch.cat(y_likelihood, dim=1)
+        y_hat = torch.cat(y_hat_slices, dim=1)
+        
+
+
+        # da mettere qua l'adapter? 
+        y_hat = self.adapter(y_hat) + y_hat  #con di_adapter = 0 questo non ha ripercussioni sul risultato (controllare)
+
+       
+        x_hat = self.g_s(y_hat)
+
+
+        return {
+            "x_hat": x_hat,
+            "likelihoods": {"y": y_likelihoods, "z": z_likelihoods},
+            "y_hat": y_hat,
+            "y": y,
+            "z":z,
+            "z_hat": z_hat,
+            "x":x
+
+        }
 
 
 
@@ -310,14 +438,8 @@ class WACNNStanh(WACNN):
             
             y_hat_slice = self.gaussian_conditional.dequantize(y_q_slice_encoded, mu)  # inverse_map(y_q_slice) + mu
 
-
-
-
-
-
             symbols_list.extend(y_q_slice_encoded.reshape(-1).tolist())
             indexes_list.extend(index.reshape(-1).tolist())
-
 
             lrp_support = torch.cat([mean_support, y_hat_slice], dim=1)
             lrp = self.lrp_transforms[slice_index](lrp_support)
@@ -393,6 +515,9 @@ class WACNNStanh(WACNN):
         #y_hat_slice = torch.round(y_hat_slice)
         #print("DOPO i valori sono---> ",torch.unique(y_hat_slice))
         y_hat = torch.cat(y_hat_slices, dim=1)
+
+
+        y_hat = self.adapter(y_hat) + y_hat
         x_hat = self.g_s(y_hat).clamp_(0, 1)
 
         return {"x_hat": x_hat}
@@ -405,13 +530,15 @@ class WACNNStanh(WACNN):
         
         
         states_d  = copy.deepcopy(self.state_dict(), memo)
-        del states_d["entropy_bottleneck._quantized_cdf"]
-        del states_d["entropy_bottleneck._cdf_length"]
-        del states_d["entropy_bottleneck._offset"]
-        del states_d["gaussian_conditional._offset"]
-        del states_d["gaussian_conditional._quantized_cdf"]
-        del states_d["gaussian_conditional._cdf_length"]
-        del states_d["gaussian_conditional.scale_table"]
+        if "entropy_bottleneck._quantized_cdf" in list(states_d.keys()):
+            del states_d["entropy_bottleneck._quantized_cdf"]
+            del states_d["entropy_bottleneck._cdf_length"]
+            del states_d["entropy_bottleneck._offset"]
+        if "gaussian_conditional._quantized_cdf" in list(states_d.keys()):
+            del states_d["gaussian_conditional._offset"]
+            del states_d["gaussian_conditional._quantized_cdf"]
+            del states_d["gaussian_conditional._cdf_length"]
+            del states_d["gaussian_conditional.scale_table"]
 
                                   
         new_model.load_state_dict(states_d)

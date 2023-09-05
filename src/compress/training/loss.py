@@ -38,54 +38,18 @@ class AdapterLoss(nn.Module):
     """
     Loss function just to train the adapter, the loss is the MAE between teacher quantizer and student quantization
     """
-    def __init__(self, quantization_policy = None):
+    def __init__(self, teacher_model):
         super().__init__()
 
         self.dist_metric = nn.MSELoss()
-        self.quantization_policy = quantization_policy
-        if self.quantization_policy is not None:
-            self.w = quantization_policy["w"]
-            self.length = self.w.shape[0]
-            self.cum_w = self.compute_cumulative_weights()
-            self.sym_w = self.compute_symmetric_weights()
-            if "b" in list(self.quantization_policy.keys()):
-                self.b = self.quantization_policy["b"] #self.compute_bias()
-            else: 
-                self.b = self.compute_bias()
-        else: 
-            self.w = None
+        self.teacher_model = teacher_model
 
-    def compute_cumulative_weights(self):
-        self.cum_w = torch.zeros(self.length + 1)
-        self.cum_w[1:] = torch.cumsum(self.w,dim = 0)  
-        self.cum_w = torch.cat((-torch.flip(self.cum_w[1:], dims = [0]),self.cum_w),dim = 0)
-        
-
-
-    def compute_symmetric_weights(self):
-        return torch.cat((torch.flip(self.w,[0]),self.w),0) 
-
-    def compute_bias(self):
-        return  torch.add(self.cum_w[1:], self.cum_w[:-1])/2
 
 
     
 
     def forward(self,output, target):
 
-
-        y_teacher = output["y_teacher"]
-        y_student = output["y_hat"]
-        
-        # flattent everything
-        #y = y.flatten()[None,None,:]hh
-        #y_student = y_student.flatten() #[None,None,:]
-        #quantize y_teacher with teacher quantization module 
-        #if self.w is None: 
-        #y_teacher = torch.round(y)
-        #else: 
-        #y_teacher = self.quantize(y)
-        #y_teacher = y_teacher.flatten()
 
 
 
@@ -104,8 +68,57 @@ class AdapterLoss(nn.Module):
         out["z_bpp"]  = torch.log(output["likelihoods"]["z"]).sum() / (-math.log(2) * num_pixels) 
         out["bpp_loss"] = sum((torch.log(likelihoods).sum() / (-math.log(2) * num_pixels)) for likelihoods in output["likelihoods"].values())   
 
- 
-        out["loss"] = self.dist_metric(y_teacher, y_student)*255**2/3
+        y_teacher = self.teacher_model.encode_latent(out["x"])
+
+
+        out["loss"] = self.dist_metric(out["y_hat"], y_teacher) 
+
+        return out
+
+
+
+
+class KnowledgeDistillationLoss(nn.Module):
+
+    def __init__(self, teacher_model, lmbda = 0):
+        super().__init__()
+
+        self.dist_metric = nn.MSELoss()
+        self.lmbda = lmbda 
+        self.teacher_model = teacher_model
+
+
+    def forward(self, output, target):
+    
+        out = {}
+        out["mse_loss"] = self.dist_metric(output["x_hat"], target)       
+       
+
+
+
+
+        N, _, H, W = target.size()      
+        num_pixels = N * H * W
+    
+           
+
+
+        out["y_bpp"] = torch.log(output["likelihoods"]["y"]).sum() / (-math.log(2) * num_pixels)
+        out["z_bpp"]  = torch.log(output["likelihoods"]["z"]).sum() / (-math.log(2) * num_pixels) 
+        out["bpp_loss"] = sum((torch.log(likelihoods).sum() / (-math.log(2) * num_pixels)) for likelihoods in output["likelihoods"].values())   
+
+
+
+        y_teacher = self.teacher_model.encode_latent(target)
+
+
+        out["adapter_loss"] = self.dist_metric(output["y_hat"], y_teacher) 
+
+        #print("************************************************ ",out["adapter_loss"],"  ",255*out["mse_loss"])
+
+
+        out["loss"] =   (1 - self.lmbda)  * 255 *out["mse_loss"]  +  self.lmbda*out["adapter_loss"]
+
 
         return out
 
@@ -118,6 +131,7 @@ class DistorsionLoss(nn.Module):
         super().__init__()
 
         self.dist_metric = nn.MSELoss()
+        self.lmbda = 0.0483
 
 
 
@@ -125,7 +139,7 @@ class DistorsionLoss(nn.Module):
     
         out = {}
         out["mse_loss"] = self.dist_metric(output["x_hat"], target)       
-        out["loss"] =   out["mse_loss"]
+        out["loss"] =   self.lmbda * 255 ** 2 *out["mse_loss"]
 
 
 

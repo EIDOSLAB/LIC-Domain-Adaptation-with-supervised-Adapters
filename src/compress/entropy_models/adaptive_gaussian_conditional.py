@@ -612,8 +612,8 @@ class AdaptedGaussianConditional(AdaptedEntropyModel):
         #equal = torch.allclose(y_hat2, y_hat)
         #print("--> ",equal)
 
-        if means is not None: 
-            y_hat = y_hat #+ means 
+        #if means is not None: 
+        #    y_hat = y_hat #+ means 
 
 
 
@@ -628,8 +628,8 @@ class AdaptedGaussianConditional(AdaptedEntropyModel):
         values = values.permute(*perms[1]).contiguous()
 
 
-        if means is not None: 
-            values = values #+ means
+        #if means is not None: 
+        #    values = values #+ means
 
         likelihood = self._likelihood(values, scales, means = means)#.to(x.device)
         if self.use_likelihood_bound:

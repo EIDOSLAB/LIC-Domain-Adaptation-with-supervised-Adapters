@@ -146,26 +146,28 @@ def get_model(args,device, N = 192, M = 320, factorized_configuration = None, ga
         print("attn block base method siamo in baseline")
         #net = models[args.model](N = N ,M = M)
         net = models[args.model]()
-        if args.pret_checkpoint_base is not None: 
+        if args.pret_checkpoint is not None: 
 
             print("entroa qua per la baseline!!!!")
             #net.update(force = True)
-            checkpoint = torch.load(args.pret_checkpoint_base, map_location=device)
+            checkpoint = torch.load(args.pret_checkpoint, map_location=device)#["state_dict"]
 
 
-            del checkpoint["state_dict"]["entropy_bottleneck._offset"]
-            del checkpoint["state_dict"]["entropy_bottleneck._quantized_cdf"]
-            del checkpoint["state_dict"]["entropy_bottleneck._cdf_length"]
-            del checkpoint["state_dict"]["gaussian_conditional._offset"]
-            del checkpoint["state_dict"]["gaussian_conditional._quantized_cdf"]
-            del checkpoint["state_dict"]["gaussian_conditional._cdf_length"]
-            del checkpoint["state_dict"]["gaussian_conditional.scale_table"]
+            if "entropy_bottleneck._quantized_cdf" in list(checkpoint.keys()):
+                del checkpoint["entropy_bottleneck._offset"]
+                del checkpoint["entropy_bottleneck._quantized_cdf"]
+                del checkpoint["entropy_bottleneck._cdf_length"]
+            if "gaussian_conditional._quantized_cdf" in list(checkpoint.keys()):
+                del checkpoint["state_dict"]["gaussian_conditional._offset"]
+                del checkpoint["state_dict"]["gaussian_conditional._quantized_cdf"]
+                del checkpoint["state_dict"]["gaussian_conditional._cdf_length"]
+                del checkpoint["state_dict"]["gaussian_conditional.scale_table"]
             
             
 
                 
-            state_dict = load_pretrained(torch.load(args.pret_checkpoint_base, map_location=device)['state_dict'])
-            net = from_state_dict(models[args.model], state_dict)
+            
+            net = from_state_dict(models[args.model], checkpoint)
 
             net.update()
             net.to(device) 
@@ -184,27 +186,59 @@ def get_model(args,device, N = 192, M = 320, factorized_configuration = None, ga
         net = models[args.model](N = N, M = M, factorized_configuration = factorized_configuration, gaussian_configuration = gaussian_configuration, dim_adapter = args.dim_adapter)
         
         if args.pret_checkpoint is not None:
-            #state_dict = load_pretrained(torch.load(args.pret_checkpoint, map_location=device)['state_dict'])
-            state_dict = load_pretrained(torch.load(args.pret_checkpoint, map_location=device))
+            print("ouuuuuuu")
+            state_dict = load_pretrained(torch.load(args.pret_checkpoint, map_location=device)['state_dict'])
+            #print("-------> ",state_dict.keys())
+            #state_dict = load_pretrained(torch.load(args.pret_checkpoint, map_location=device))
             #print("faccio il check dei cumulative weights: ",net.gaussian_conditional.sos.cum_w)
             #print("prima di fare l'update abbiamo che: ",net.h_a[0].weight[0])
-            """
-            del state_dict["gaussian_conditional._offset"] 
-            del state_dict["gaussian_conditional._quantized_cdf"] 
-            del state_dict["gaussian_conditional._cdf_length"] 
-            del state_dict["gaussian_conditional.scale_table"] 
-            del state_dict["entropy_bottleneck._offset"]
-            del state_dict["entropy_bottleneck._quantized_cdf"]
-            del state_dict["entropy_bottleneck._cdf_length"]
-            """
-            net.load_state_dict(state_dict)
+            if "gaussian_conditional._quantized_cdf" in list(state_dict.keys()):
+                del state_dict["gaussian_conditional._offset"] 
+                del state_dict["gaussian_conditional._quantized_cdf"] 
+                del state_dict["gaussian_conditional._cdf_length"] 
+                del state_dict["gaussian_conditional.scale_table"] 
+            if "entropy_bottleneck._quantized_cdf" in list(state_dict.keys()):
+                del state_dict["entropy_bottleneck._offset"]
+                del state_dict["entropy_bottleneck._quantized_cdf"]
+                del state_dict["entropy_bottleneck._cdf_length"]
+            
+        net.load_state_dict(state_dict)
         net.to(device)       
         net.update()
         #print("***************************** CONTROLLO INOLTRE I CUMULATIVE WEIGHTS  ", net.gaussian_conditional.sos.cum_w)   
         baseline = False   
         return net, baseline
 
+    elif args.model == "decoder":
+        net = models[args.model](N = N, 
+                                M = M, 
+                                gaussian_configuration = gaussian_configuration, 
+                                dim_adapter_1_attention = args.dim_adapter_1_attention,
+                                dim_adapter_2_attention = args.dim_adapter_2_attention,
+                                stride_1 = args.stride_1,
+                                stride_2 = args.stride_2 )
 
+
+        if args.pret_checkpoint is not None:
+            state_dict = load_pretrained(torch.load(args.pret_checkpoint, map_location=device)['state_dict'])
+
+            if "gaussian_conditional._offset" in list(state_dict.keys()):
+                del state_dict["gaussian_conditional._offset"] 
+                del state_dict["gaussian_conditional._quantized_cdf"] 
+                del state_dict["gaussian_conditional._cdf_length"] 
+                del state_dict["gaussian_conditional.scale_table"] 
+            if "entropy_bottleneck._offset" in list(state_dict.keys()):
+                del state_dict["entropy_bottleneck._offset"]
+                del state_dict["entropy_bottleneck._quantized_cdf"]
+                del state_dict["entropy_bottleneck._cdf_length"]
+            
+            net.load_state_dict(state_dict)
+
+            net.to(device)       
+            net.update()
+            #print("***************************** CONTROLLO INOLTRE I CUMULATIVE WEIGHTS  ", net.gaussian_conditional.sos.cum_w)   
+            baseline = False   
+            return net, baseline
 
     else:
         net = models[args.model](N = N )

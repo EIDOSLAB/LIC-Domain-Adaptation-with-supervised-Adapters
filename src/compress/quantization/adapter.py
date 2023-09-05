@@ -31,9 +31,10 @@ class Adapter(nn.Module):
                         stride = 1,
                         kernel_size = 1,
                         groups = 1, 
-                        bias = False,
+                        bias = True,
                         standard_deviation = 0.00,
-                        mean = 0.0):
+                        mean = 0.0, 
+                        padding = 0):
         super().__init__()
 
         self.in_ch = in_ch
@@ -45,6 +46,7 @@ class Adapter(nn.Module):
         self.bias = bias
         self.standard_deviation = standard_deviation
         self.mean = mean 
+        self.padding = padding
         
 
 
@@ -67,85 +69,87 @@ class Adapter(nn.Module):
 
     def define_adapter(self):
         if self.dim_adapter == 0:
-            return ZeroLayer()
+            if self.stride == 1:
+                return ZeroLayer()
 
-        elif self.dim_adapter == 1:
-            print("sono entrato qua nella definizione")
-            convv =  nn.Conv2d(self.in_ch, self.out_ch, kernel_size=1, stride=1, bias=self.bias, groups=self.groups)
-            nn.init.normal_(convv.weight, mean=self.mean, std=self.standard_deviation)
-            if self.bias:
-                nn.init.zeros_(convv.bias)
-            
+            elif self.stride == -1:
+                return nn.Sequential(
+                    nn.Conv2d(
+                        self.in_ch,
+                        self.out_ch * 4,
+                        kernel_size=1,
+                        stride=1,
+                        bias=self.bias,
+                        groups=self.groups,
+                    ),
+                    nn.PixelShuffle(2),
+                    # above operation is only used for computing the shape.
+                    ZeroLayer(),
+                )
+            else:
+                return nn.Sequential(
+                    nn.Conv2d(
+                        self.in_ch,
+                        self.out_ch,
+                        kernel_size=1,
+                        stride= 1, #stride,
+                        bias=self.bias,
+                        groups=self.groups,
+                        padding = self.padding
+                    ),
+                    # above operation is only used for computing the shape.
+                    ZeroLayer(),
+                )
 
-            return convv
-
-        elif self.dim_adapter == 2:
-
-            model = nn.Sequential(
-                nn.Conv2d(
-                    self.in_ch,
-                    self.dim_adapter,
-                    kernel_size=1,
-                    bias=self.bias,
-                    stride=self.stride,
-                    groups=self.groups,
-                ),
-                nn.Conv2d(self.dim_adapter, self.out_ch, kernel_size=1, bias=self.bias, groups=self.groups),
-            )
-
-            model.apply(self.initialization())
-            return model
+        elif self.dim_adapter < 0:
+            if self.stride == -1:
+                # this implementation of subpixel conv. is done by ours.
+                # original impl. by Cheng uses 3x3 conv.
+                return nn.Sequential(
+                    nn.Conv2d(
+                        self.in_ch,
+                        self.out_ch * 4,
+                        kernel_size=self.kernel_size,
+                        stride=1,
+                        bias=self.bias,
+                        groups=self.groups,
+                        padding = self.padding
+                    ),
+                    nn.PixelShuffle(2),
+                )
+            else:
+                return nn.Conv2d(self.in_ch, self.out_ch, kernel_size=1, stride=1, bias=self.bias, groups=self.groups)
 
         else:
+            if self.stride == -1:
+                # this implementation of subpixel conv. is done by ours.
+                # original impl. by Cheng uses 3x3 conv. ddd
+                return nn.Sequential(
+                    nn.Conv2d(
+                        self.in_ch,
+                        self.dim_adapter * 4,
+                        kernel_size=self.kernel_size,
+                        bias=self.bias,
+                        stride=1,
+                        groups=self.groups,
 
-            N = self.in_ch
-            self.encoder = nn.Sequential(
-                conv(N, N, stride=1, kernel_size=3),
-                nn.ReLU(inplace=True),
-                conv(N, N, stride = 2, kernel_size = 5),
-                nn.ReLU(inplace=True),
-                conv(N, N, stride = 2, kernel_size = 5),
-            )
-
-            self.decoder = nn.Sequential(
-                deconv(N, N, stride = 2, kernel_size = 5),
-                nn.ReLU(inplace=True),
-                deconv(N, N, stride = 2, kernel_size = 5),
-                nn.ReLU(inplace=True),
-                conv(N, N, stride=1, kernel_size=3),
-                nn.ReLU(inplace=True),
-            )
-
-            # Inizializzazione dei pesi con valori casuali dalla distribuzione normale con varianza piccola
-            for m in self.encoder.modules():
-                print("I entered hettrrrre!!!")
-                if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
-
-                    init.normal_(m.weight, mean=self.mean, std=self.standard_deviation)
-                    if m.bias is not None:
-                        init.zeros_(m.bias)
-            
-
-
-            # Inizializzazione dei pesi con valori casuali dalla distribuzione normale con varianza piccola
-            for m in self.decoder.modules():
-                if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
-                    init.normal_(m.weight, mean=self.mean, std=self.standard_deviation)
-                    if m.bias is not None:
-                        init.zeros_(m.bias)
-            return [self.encoder, self.decoder]
-
+                    ),
+                    nn.PixelShuffle(2),
+                    nn.Conv2d(self.dim_adapter, self.out_ch, kernel_size=self.kernel_size, bias=self.bias, groups=self.groups, stride = 2),
+                )
+            else:
+                return nn.Sequential(
+                    nn.Conv2d(
+                        self.in_ch,
+                        self.dim_adapter,
+                        kernel_size=self.kernel_size,
+                        bias=self.bias,
+                        stride=self.stride,
+                        groups=self.groups,
+                    ),
+                    nn.Conv2d(self.dim_adapter, self.out_ch, kernel_size=1, bias=self.bias, groups=self.groups),
+                )
 
 
     def forward(self,x):
-
-
-   
-        if self.dim_adapter !=2:
-
-
-            return  self.AdapterModule(x)
-        else:
-            x = self.encoder(x)
-            x = self.decoder(x)
-            return x
+        return  self.AdapterModule(x)

@@ -36,7 +36,7 @@ class AverageMeter:
         self.avg = self.sum / self.count
 
 
-def train_one_epoch(model, criterion, train_dataloader, optimizer, aux_optimizer, epoch, clip_max_norm ,counter, sos,not_adapters):
+def train_one_epoch(model, criterion, train_dataloader, optimizer, aux_optimizer, epoch, clip_max_norm ,counter, sos, not_adapters):
     model.train()
     device = next(model.parameters()).device
 
@@ -49,6 +49,8 @@ def train_one_epoch(model, criterion, train_dataloader, optimizer, aux_optimizer
     y_bpp = AverageMeter()
     z_bpp = AverageMeter()
 
+    adapter_loss = AverageMeter()
+
 
 
 
@@ -59,10 +61,13 @@ def train_one_epoch(model, criterion, train_dataloader, optimizer, aux_optimizer
         if aux_optimizer is not None:
             aux_optimizer.zero_grad()
 
-        if sos:
-            out_net = model(d, training = not_adapters)
+        if sos and not_adapters:
+            out_net = model(d, training = True)
 
-        else: 
+        elif sos is True and not_adapters is False:
+
+            out_net = model.forward_adapter(d)
+        else:    
             out_net = model(d)
 
 
@@ -121,15 +126,16 @@ def train_one_epoch(model, criterion, train_dataloader, optimizer, aux_optimizer
             y_bpp.update(out_criterion["y_bpp"].clone().detach())
             z_bpp.update(out_criterion["z_bpp"].clone().detach())    
 
-        if "res_met" in list(out_criterion.keys()):
+        if "adapter_loss" in list(out_criterion.keys()):
 
             wand_dict = {
                 "train_batch": counter,
-                "train_batch/residual_mse": out_criterion["res_met"].clone().detach().item(),
-                "train_batch/residual_bpp": out_criterion["bpp_res"].clone().detach().item()
+                "train_batch/adapter_loss": out_criterion["adapter_loss"].clone().detach().item(),
+
 
             }
-            wandb.log(wand_dict)  
+            wandb.log(wand_dict) 
+            adapter_loss.update( out_criterion["adapter_loss"].clone().detach().item()) 
         
         if "quantization_loss" in list(out_criterion.keys()):
             wand_dict = {
@@ -151,6 +157,7 @@ def train_one_epoch(model, criterion, train_dataloader, optimizer, aux_optimizer
         "train/loss": loss.avg,
         "train/bpp": bpp_loss.avg,
         "train/mse": mse_loss.avg,
+        "train/adapter_loss":adapter_loss.avg
         }
         
     wandb.log(log_dict)
@@ -176,7 +183,7 @@ def train_one_epoch(model, criterion, train_dataloader, optimizer, aux_optimizer
 
 
 
-def test_epoch(epoch, test_dataloader, model, criterion, sos, valid):
+def test_epoch(epoch, test_dataloader, model, criterion, sos, valid, not_adapters):
     model.eval()
     device = next(model.parameters()).device
 
@@ -191,13 +198,20 @@ def test_epoch(epoch, test_dataloader, model, criterion, sos, valid):
     residual_met = AverageMeter()
     residual_bpp = AverageMeter()
     quantization_error = AverageMeter()
+
+    adapter_error = AverageMeter()
     with torch.no_grad():
         for d in test_dataloader:
             d = d.to(device)
-            if sos:
+            if sos and not_adapters:
                 out_net = model(d, training = False)
-            else: 
+            elif sos is True and not_adapters is False: 
+                out_net = model.forward_adapter(d)
+            else:
                 out_net = model(d)
+
+                
+
 
             out_criterion = criterion(out_net, d)
 
@@ -217,8 +231,12 @@ def test_epoch(epoch, test_dataloader, model, criterion, sos, valid):
 
 
             if "quantization_loss" in list(out_criterion.keys()):
-
                 quantization_error.update(out_criterion["quantization_loss"])
+
+
+
+            if "adapter_loss" in list(out_criterion.keys()):
+                adapter_error.update(out_criterion["adapter_loss"])
 
 
     print(
@@ -243,7 +261,8 @@ def test_epoch(epoch, test_dataloader, model, criterion, sos, valid):
         "test/mse": mse_loss.avg,
         "test/psnr":psnr.avg,
         "test/ssim":ssim.avg,
-        "test/quantization_error":quantization_error.avg
+        "test/quantization_error":quantization_error.avg,
+        "test/adapter_error": adapter_error.avg
         }
     else:
 
@@ -260,7 +279,8 @@ def test_epoch(epoch, test_dataloader, model, criterion, sos, valid):
         "valid/mse": mse_loss.avg,
         "valid/psnr":psnr.avg,
         "valid/ssim":ssim.avg,
-        "valid/quantization_error":quantization_error.avg
+        "valid/quantization_error":quantization_error.avg,
+        "valid/adapter_error": adapter_error.avg
         }       
 
     wandb.log(log_dict)
@@ -338,7 +358,7 @@ def bpp_calculation(out_net, out_enc, fact = False):
 
 def psnr(a: torch.Tensor, b: torch.Tensor, max_val: int = 255) -> float:
 
-    print("dio maledetto di dio cane: ",torch.log10((a - b).pow(2).mean()))
+
     return 20 * math.log10(max_val) - 10 * torch.log10((a - b).pow(2).mean())
 
 def compute_metrics( org, rec, max_val: int = 255):

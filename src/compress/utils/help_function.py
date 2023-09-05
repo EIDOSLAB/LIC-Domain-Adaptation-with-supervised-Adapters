@@ -6,6 +6,7 @@ import math
 from pytorch_msssim import ms_ssim
 import torch.nn.functional as F
 import torchac
+import wandb
 
 def configure_latent_space_policy(args, device, baseline):
 
@@ -99,7 +100,7 @@ def create_savepath(args,epoch):
     c_best = join(c_best,args.suffix).replace("/","_")
     
     
-    path = args.filename
+    path =  "/data/"#args.filename
     savepath = join(path,c)
     savepath_best = join(path,c_best)
     
@@ -164,11 +165,9 @@ def configure_optimizers(net, args, baseline):
     """Separate parameters for the main optimizer and the auxiliary optimizer.
     Return two optimizers"""
 
-    parameters = {
-        n
-        for n, p in net.named_parameters()
-        if not n.endswith(".quantiles") and p.requires_grad
-    }
+    parameters = {n for n, p in net.named_parameters() if not n.endswith(".quantiles") and (p.requires_grad or "sos" in n)} 
+
+
 
     params_dict = dict(net.named_parameters())
 
@@ -198,11 +197,12 @@ def configure_optimizers(net, args, baseline):
     if args.sgd == "adam":
         optimizer = optim.Adam((params_dict[n] for n in sorted(parameters)),lr=args.learning_rate,)
     else: 
-        print("uso sgd conme optimizer!")
+
+
         optimizer = optim.SGD((params_dict[n] for n in sorted(parameters)),lr=args.learning_rate,momentum= args.momentum, weight_decay= args.weight_decay)
 
     return optimizer, aux_optimizer
-import wandb
+
 def save_checkpoint_our(state, is_best, filename,filename_best):
     torch.save(state, filename)
     wandb.save(filename)

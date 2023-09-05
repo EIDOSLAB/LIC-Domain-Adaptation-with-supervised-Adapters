@@ -144,6 +144,62 @@ class WACNN(CompressionModelBase):
         return True
 
 
+
+
+    def encode_latent(self, x): 
+        with torch.no_grad():
+            y = self.g_a(x)
+            y_shape = y.shape[2:]
+            z = self.h_a(y)
+
+            z_hat = self.entropy_bottleneck(z)
+
+            # Use rounding (instead of uniform noise) to modify z before passing it
+            # to the hyper-synthesis transforms. Note that quantize() overrides the
+            # gradient to create a straight-through estimator.
+            z_offset = self.entropy_bottleneck._get_medians()
+            z_tmp = z - z_offset
+            z_hat = ste_round(z_tmp) + z_offset
+
+            latent_scales = self.h_scale_s(z_hat)
+            latent_means = self.h_mean_s(z_hat)
+
+            y_slices = y.chunk(self.num_slices, 1)
+            y_hat_slices = []
+
+            latent_scales = self.h_scale_s(z_hat)
+            latent_means = self.h_mean_s(z_hat)
+
+            y_slices = y.chunk(self.num_slices, 1)
+            y_hat_slices = []
+
+            for slice_index, y_slice in enumerate(y_slices):
+                support_slices = (y_hat_slices if self.max_support_slices < 0 else y_hat_slices[:self.max_support_slices])
+                mean_support = torch.cat([latent_means] + support_slices, dim=1)
+                mu = self.cc_mean_transforms[slice_index](mean_support)
+                mu = mu[:, :, :y_shape[0], :y_shape[1]]
+
+                scale_support = torch.cat([latent_scales] + support_slices, dim=1)
+                scale = self.cc_scale_transforms[slice_index](scale_support)
+                scale = scale[:, :, :y_shape[0], :y_shape[1]]
+
+                #_, y_slice_likelihood = self.gaussian_conditional(y_slice, scale, mu)
+                y_hat_slice, _ = self.gaussian_conditional(y_slice, scale, mu)
+
+                y_hat_slice = ste_round(y_slice - mu) + mu
+
+
+                lrp_support = torch.cat([mean_support, y_hat_slice], dim=1)
+                lrp = self.lrp_transforms[slice_index](lrp_support)
+                lrp = 0.5 * torch.tanh(lrp)
+                y_hat_slice += lrp
+
+                y_hat_slices.append(y_hat_slice)
+
+            y_hat = torch.cat(y_hat_slices, dim=1)   
+        return y_hat
+
+
     def forward(self, x):
         y = self.g_a(x)
         y_shape = y.shape[2:]

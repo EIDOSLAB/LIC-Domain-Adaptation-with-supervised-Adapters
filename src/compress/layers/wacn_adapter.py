@@ -26,25 +26,9 @@ def define_adapter(
     dim_adapter: int,
     stride: int = 1,
     groups: int = 1,
-    bias: bool = False,
+    bias: bool = True,
 ) -> nn.Module:
-    """define residual adapters for the decoder
 
-    Args:
-        in_ch (int):
-        out_ch (int):
-        dim_adapter (int): the intermediate dimension of the adapter
-        stride (int, optional): Defaults to 1.
-        groups (int, optional): Defaults to 1. if the groups=in_ch,
-            the adapter becomes a channel-wise multiplication layer used in [1].
-        bias (bool, optional): Defaults to False.
-
-    Returns:
-        nn.Module: the adapter layer
-
-    References:
-    [1] https://openaccess.thecvf.com/content/CVPR2022/papers/Li_Cross-Domain_Few-Shot_Learning_With_Task-Specific_Adapters_CVPR_2022_paper.pdf
-    """
     if dim_adapter == 0:
         if stride == 1:
             return ZeroLayer()
@@ -69,7 +53,7 @@ def define_adapter(
                     in_ch,
                     out_ch,
                     kernel_size=1,
-                    stride=stride,
+                    stride= 1, #stride,
                     bias=bias,
                     groups=groups,
                 ),
@@ -93,9 +77,7 @@ def define_adapter(
                 nn.PixelShuffle(2),
             )
         else:
-            return nn.Conv2d(
-                in_ch, out_ch, kernel_size=1, stride=stride, bias=bias, groups=groups
-            )
+            return nn.Conv2d(in_ch, out_ch, kernel_size=1, stride=stride, bias=bias, groups=groups)
 
     else:
         if stride == -1:
