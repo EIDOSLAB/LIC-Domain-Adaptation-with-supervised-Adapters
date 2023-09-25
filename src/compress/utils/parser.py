@@ -3,9 +3,14 @@ import argparse
 from compress.zoo import models
 def parse_args(argv):
     parser = argparse.ArgumentParser(description="Example training script.")
-    parser.add_argument("-m","--model",default="latent",choices=models.keys(),help="Model architecture (default: %(default)s)",)
+    parser.add_argument("-m","--model",default="decoder",choices=models.keys(),help="Model architecture (default: %(default)s)",)
+
+    parser.add_argument("-dt", "--dataset_type", type=str, default = "domain", choices = ["domain","openimages","PACS"], help="Training dataset")
+
+    parser.add_argument("-kfd", "--keyfold_dataset", type=str, default = "sketch", choices = ["sketch","cartoon"], help="Training dataset")
+
     parser.add_argument("-d", "--dataset", type=str, default = "/scratch/dataset/openimages", help="Training dataset")
-    parser.add_argument("-e","--epochs",default=600,type=int,help="Number of epochs (default: %(default)s)",)
+    parser.add_argument("-e","--epochs",default=250,type=int,help="Number of epochs (default: %(default)s)",)
     parser.add_argument("--suffix",default=".pth.tar",type=str,help="factorized_annealing",)
 
     parser.add_argument("-lr","--learning-rate",default=1e-4,type=float,help="Learning rate (default: %(default)s)",)
@@ -13,7 +18,7 @@ def parse_args(argv):
 
 
     parser.add_argument("-n","--num-workers",type=int,default=8,help="Dataloaders threads (default: %(default)s)",)
-    parser.add_argument("--lmbda",type=float,default=0.9,help="Bit-rate distortion parameter (default: %(default)s)",)
+    parser.add_argument("--lmbda",type=float,default=0.0483,help="Bit-rate distortion parameter (default: %(default)s)",)
     parser.add_argument("--gamma",type=float,default=0.0,help="Bit-rate distortion parameter (default: %(default)s)",)
 
 
@@ -36,11 +41,6 @@ def parse_args(argv):
 
 
 
-    parser.add_argument("--dim_adapter_1_attention",default = -1, type = int)
-    parser.add_argument("--dim_adapter_2_attention", default = -1, type = int)
-
-    parser.add_argument("--stride_1",default = 1, type = int)
-    parser.add_argument("--stride_2", default = 1, type = int)
 
 
 
@@ -51,7 +51,7 @@ def parse_args(argv):
 
 
 
-    parser.add_argument("--gauss_extrema",default=120,type=int,help="gauss_extrema",)
+    parser.add_argument("--gauss_extrema",default=200,type=int,help="gauss_extrema",)
     parser.add_argument('--gauss_tr', '-gt', action='store_true', help='gaussian trainable')
 
 
@@ -67,34 +67,48 @@ def parse_args(argv):
 
     parser.add_argument( "--starting_epoch", default=-1, type=int, help="first epoch for training (see difference)",)
 
-    parser.add_argument( "--num_images_train", default=24016, type=int, help="images for training",)
-    parser.add_argument( "--num_images_val", default=2048, type=int, help="images for validation",)  
+    parser.add_argument( "--num_images_train", default=16024, type=int, help="images for training",)
+    parser.add_argument( "--num_images_val", default=1024, type=int, help="images for validation",)  
 
 
-    parser.add_argument("--pret_checkpoint",default = "/scratch/KD/devil2022/derivation/sgd/00360-q6-devil2022.pth.tar") 
-    parser.add_argument("--pret_checkpoint_teacher",default = "/scratch/universal-dic/weights/q6/model.pth")
+    #parser.add_argument("--pret_checkpoint",default = "/scratch/KD/devil2022/derivation/adam/00670-q6-devil2022-adam.pth.tar") #ssssssssssszzz
+    parser.add_argument("--pret_checkpoint",default = "/scratch/universal-dic/weights/q2/model.pth") 
+    parser.add_argument("--pret_checkpoint_base",default = "/scratch/universal-dic/weights/q2/model.pth")
 
 
-    parser.add_argument('--unfreeze_ha',  action='store_true', help='unfreeze hyperprior analysis')
-    parser.add_argument('--unfreeze_hma',  action='store_true', help='unfreeze hyperprior scale')
-    parser.add_argument('--unfreeze_hsa',  action='store_true', help='unfreeze hyperprior mean')
+    parser.add_argument('--unfreeze_hsa_loop',  action='store_true', help='unfreeze hyperprior analysis')
+    parser.add_argument('--unfreeze_hma',  action='store_true', help='unfreeze hyperprior mean')
+    parser.add_argument('--unfreeze_hsa',  action='store_true', help='unfreeze hyperprior scale')
 
     parser.add_argument("--scheduler","-sch", type = str, default ="plateau")
-    parser.add_argument("--patience",default=10,type=int,help="patience",)
+    parser.add_argument("--patience",default=20,type=int,help="patience",)
 
     parser.add_argument("--trainable_lrp","-tlrp",action='store_true',)
 
-    parser.add_argument('--training_policy', '-tp',type = str, default = "kd", choices= ["entire_qe","quantization_lrp","residual","kd","entire", "quantization", "adapter","mse","controlled","only_lrp"] , help='adapter loss')
+    parser.add_argument('--training_policy', '-tp',type = str, default = "mse", choices= ["entire_qe","quantization_lrp","residual","kd","entire", "quantization", "adapter","mse","controlled","rate"] , help='adapter loss')
 
-    parser.add_argument("--dim_adapter",default=1,type=int,help="dimension of the adapter",)
+    
+    parser.add_argument("--type_adapter",type = str, choices=["singular","transformer","attention","selfattention"],default="singular",help = "typology of adapters")
     parser.add_argument( "--mean", default=0.0, type=float, help="initialization mean",)
     parser.add_argument( "--std", default=0.01, type=float, help="initialization std",)
-    parser.add_argument( "--kernel_size", default=1, type=int, help="initialization std",)
-    parser.add_argument("--adapter_stride", default=-1, type = int)
-    parser.add_argument("--padding", default=1, type = int)
     parser.add_argument("--bias","-bs",action='store_true',)
     parser.add_argument("--unfreeze_decoder","-ud",action='store_true',)
-    parser.add_argument("--level_dec_unfreeze", default=-1, type = int)
+    parser.add_argument("--level_dec_unfreeze", nargs='+', type = int, default = [6,7,8])
+
+
+
+    parser.add_argument("--depth", default=1, type = int)
+    parser.add_argument("--dim_adapter_1",default = 320, type = int)
+    parser.add_argument("--dim_adapter_2", default =192, type = int)
+    parser.add_argument("--stride_1",default = 1, type = int)
+    parser.add_argument("--stride_2", default = 1, type = int)
+    parser.add_argument("--kernel_size_1", default = 3, type = int)
+    parser.add_argument("--kernel_size_2", default = 3, type = int)
+    parser.add_argument("--padding_1", default = 1, type = int)
+    parser.add_argument("--padding_2", default = 1, type = int)
+    parser.add_argument("--position", default = "res_last", type = str)
+
+
 
 
 
@@ -106,18 +120,23 @@ def parse_args(argv):
 def parse_args_evaluation(argv):
     parser = argparse.ArgumentParser(description="Example training script.")
 
-    parser.add_argument("-m","--model",default="no_mean",help="Model architecture (default: %(default)s)",)
+    parser.add_argument("-m","--model",default="both",help="Model architecture (default: %(default)s)",)
+    parser.add_argument("-tq","--targ_q",default="q6",help="quality level to check",)
+    parser.add_argument("-pm","--path_models",default="/scratch/KD/devil2022/derivation/adam",help="Model architecture (default: %(default)s)",)
     
     parser.add_argument("--lrp", action="store_true", help="Use cuda")
     parser.add_argument("--lrp_path",default="nolrp",help="Model architecture (default: %(default)s)",)
     parser.add_argument("-gm","--gamma",default="gm0",help="Model architecture (default: %(default)s)",)
     parser.add_argument("-mp","--model_path",default="/scratch/quantization_error/",help="Model architecture (default: %(default)s)",)
 
+    parser.add_argument("-td","--test_dataset", default = "kodak", type = str)
+
 
     parser.add_argument("-rp","--result_path",default="/scratch/inference/results",help="Model architecture (default: %(default)s)",)
     parser.add_argument("-ip","--image_path",default="/scratch/dataset/kodak",help="Model architecture (default: %(default)s)",)
     parser.add_argument('--entropy_estimation', '-ep', action='store_true', help='entropy estimation')
     parser.add_argument("--cuda", action="store_true", help="Use cuda")
+    parser.add_argument("--seed", type=float,default = 42, help="Set random seed for reproducibility")
 
 
     args = parser.parse_args(argv)

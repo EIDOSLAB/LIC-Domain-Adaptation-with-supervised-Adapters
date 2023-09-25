@@ -9,6 +9,8 @@ from compress.layers import GDN
 from compress.ops import ste_round
 from compress.layers import conv3x3, subpel_conv3x3, Win_noShift_Attention, conv, deconv
 from .base import CompressionModelBase
+from compressai.models.utils import update_registered_buffers
+
 
 from compress.entropy_models import  AdaptedEntropyBottleneck, AdaptedGaussianConditional
 #from compress.entropy_models.adaptive_gaussian_conditional import GaussianConditionalSoS
@@ -20,18 +22,24 @@ SCALES_MIN = 0.11
 SCALES_MAX = 256
 SCALES_LEVELS = 64
 
+from compressai.models import CompressionModel
+
+
+
 
 def get_scale_table(min=SCALES_MIN, max=SCALES_MAX, levels=SCALES_LEVELS):
     return torch.exp(torch.linspace(math.log(min), math.log(max), levels))
 
 
-class WACNN(CompressionModelBase):
+class WACNN(CompressionModel):
     """CNN based model"""
 
-    def __init__(self, N=192, M=320,trainable_lrp = True, **kwargs):
+    def __init__(self, N=192, M=320,**kwargs):
         super().__init__(**kwargs)
         self.num_slices = 10
         self.max_support_slices = 5
+        self.N = N 
+        self.M = M
 
         self.g_a = nn.Sequential(
             conv(3, N, kernel_size=5, stride=2),
@@ -133,7 +141,10 @@ class WACNN(CompressionModelBase):
 
         self.entropy_bottleneck = EntropyBottleneck(N)
         self.gaussian_conditional = GaussianConditional(None)
-        self.trainable_lrp = trainable_lrp
+
+
+
+
 
     def update(self, scale_table=None, force=False, device = torch.device("cuda")):
         if scale_table is None:
@@ -144,71 +155,67 @@ class WACNN(CompressionModelBase):
         return True
 
 
+    
+    def modify_adapter(self, args, device):
+        print("anche nel caso base faccio qualcosa!!!!!")
+        self.dim_adapter = args.dim_adapter 
+        self.adapter = Adapter(320, 320 , 
+                               dim_adapter= self.dim_adapter, 
+                               standard_deviation= args.std,
+                               type_adapter= args.type_adapter,
+                                 mean= args.mean, 
+                                 bias = args.bias, 
+                                 kernel_size = args.kernel_size, 
+                                 stride = args.adapter_stride, 
+                                 padding = args.padding )
+
+        self.adapter.to(device)
+        self.pars_adapter(re_grad = True)
 
 
-    def encode_latent(self, x): 
-        with torch.no_grad():
-            y = self.g_a(x)
-            y_shape = y.shape[2:]
-            z = self.h_a(y)
 
-            z_hat = self.entropy_bottleneck(z)
-
-            # Use rounding (instead of uniform noise) to modify z before passing it
-            # to the hyper-synthesis transforms. Note that quantize() overrides the
-            # gradient to create a straight-through estimator.
-            z_offset = self.entropy_bottleneck._get_medians()
-            z_tmp = z - z_offset
-            z_hat = ste_round(z_tmp) + z_offset
-
-            latent_scales = self.h_scale_s(z_hat)
-            latent_means = self.h_mean_s(z_hat)
-
-            y_slices = y.chunk(self.num_slices, 1)
-            y_hat_slices = []
-
-            latent_scales = self.h_scale_s(z_hat)
-            latent_means = self.h_mean_s(z_hat)
-
-            y_slices = y.chunk(self.num_slices, 1)
-            y_hat_slices = []
-
-            for slice_index, y_slice in enumerate(y_slices):
-                support_slices = (y_hat_slices if self.max_support_slices < 0 else y_hat_slices[:self.max_support_slices])
-                mean_support = torch.cat([latent_means] + support_slices, dim=1)
-                mu = self.cc_mean_transforms[slice_index](mean_support)
-                mu = mu[:, :, :y_shape[0], :y_shape[1]]
-
-                scale_support = torch.cat([latent_scales] + support_slices, dim=1)
-                scale = self.cc_scale_transforms[slice_index](scale_support)
-                scale = scale[:, :, :y_shape[0], :y_shape[1]]
-
-                #_, y_slice_likelihood = self.gaussian_conditional(y_slice, scale, mu)
-                y_hat_slice, _ = self.gaussian_conditional(y_slice, scale, mu)
-
-                y_hat_slice = ste_round(y_slice - mu) + mu
+    def pars_adapter(self, re_grad = False): 
+        #for single_adapter in self.adapter_trasforms:
+        for p in self.adapter.parameters(): 
+                p.requires_grad = re_grad  
+                
 
 
-                lrp_support = torch.cat([mean_support, y_hat_slice], dim=1)
-                lrp = self.lrp_transforms[slice_index](lrp_support)
-                lrp = 0.5 * torch.tanh(lrp)
-                y_hat_slice += lrp
+    def pars_decoder(self,re_grad = False, st = [0,1,2,3,4,5,6,7]):
+        
 
-                y_hat_slices.append(y_hat_slice)
+        for i,lev in enumerate(self.g_s):
+            if i in  st:
+                for n,p in lev.named_parameters():
+                    p.requires_grad = re_grad
+            else:
+                print("pass ",i)
 
-            y_hat = torch.cat(y_hat_slices, dim=1)   
-        return y_hat
+
+
+    def pars_entropy_estimation(self, re_grade = True):
+        for single_layer in self.cc_scale_transforms:
+            for n,p in single_layer.named_parameters():
+                p.requires_grad = re_grade
+        
+        for single_layer in self.cc_mean_transforms:
+            for n,p in single_layer.named_parameters():
+                p.requires_grad = re_grade
 
 
     def forward(self, x):
         y = self.g_a(x)
         y_shape = y.shape[2:]
         z = self.h_a(y)
-        #_, z_likelihoods = self.entropy_bottleneck(z)
-        z_hat, z_likelihoods = self.entropy_bottleneck(z)
+
+
+
+
+
+        z_hat, z_likelihoods = self.entropy_bottleneck(z, training = False)
 
         # Use rounding (instead of uniform noise) to modify z before passing it
-        # to the hyper-synthesis transforms. Note that quantize() overrides the
+        # to the hyper-synthesis transforms. Note that quantize() overrides the bbb
         # gradient to create a straight-through estimator.
         z_offset = self.entropy_bottleneck._get_medians()
         z_tmp = z - z_offset
@@ -232,16 +239,16 @@ class WACNN(CompressionModelBase):
             scale = scale[:, :, :y_shape[0], :y_shape[1]]
 
             #_, y_slice_likelihood = self.gaussian_conditional(y_slice, scale, mu)
-            y_hat_slice, y_slice_likelihood = self.gaussian_conditional(y_slice, scale, mu)
+            _, y_slice_likelihood = self.gaussian_conditional(y_slice, scale, mu)
             y_likelihood.append(y_slice_likelihood)
-            y_hat_slice = ste_round(y_slice - mu) + mu
+            y_hat_slice = ste_round(y_slice - mu) + mu ##ffff
+            #y_q_slice = self.gaussian_conditional.quantize(y_slice, "symbols", mu)
+            #y_hat_slice = y_q_slice + mu
 
-
-            if self.trainable_lrp:
-                lrp_support = torch.cat([mean_support, y_hat_slice], dim=1)
-                lrp = self.lrp_transforms[slice_index](lrp_support)
-                lrp = 0.5 * torch.tanh(lrp)
-                y_hat_slice += lrp
+            lrp_support = torch.cat([mean_support, y_hat_slice], dim=1)
+            lrp = self.lrp_transforms[slice_index](lrp_support)
+            lrp = 0.5 * torch.tanh(lrp)
+            y_hat_slice += lrp
 
             y_hat_slices.append(y_hat_slice)
 
@@ -249,6 +256,9 @@ class WACNN(CompressionModelBase):
 
         y_hat = torch.cat(y_hat_slices, dim=1)
         y_likelihoods = torch.cat(y_likelihood, dim=1)
+
+        #y_hat = self.adapter(y_hat) + y_hat #aggiunto per l'adapter!!!!
+
         x_hat = self.g_s(y_hat)
 
         
@@ -261,17 +271,19 @@ class WACNN(CompressionModelBase):
         }
 
     def load_state_dict(self, state_dict):
-        super().load_state_dict(state_dict)
-
-
-
-    def change_pars_lrp(self, tr = False): 
-        self.trainable_lrp = tr
-        for block in self.lrp_transforms:
-            for layer in block:
-                for param in layer.parameters():
-                    param.requires_grad = tr
-
+        update_registered_buffers(
+            self.gaussian_conditional,
+            "gaussian_conditional",
+            ["_quantized_cdf", "_offset", "_cdf_length", "scale_table"],
+            state_dict,
+        )
+        update_registered_buffers(
+            self.entropy_bottleneck,
+            "entropy_bottleneck",
+            ["_quantized_cdf", "_offset", "_cdf_length"],
+            state_dict,
+        )
+        super().load_state_dict(state_dict, strict = False)
 
     @classmethod
     def from_state_dict(cls, state_dict):
@@ -280,8 +292,16 @@ class WACNN(CompressionModelBase):
         # M = state_dict["g_a.6.weight"].size(0)
         # net = cls(N, M)
         net = cls(192, 320)
-        net.load_state_dict(state_dict)
+        net.load_state_dict(state_dict,strict = False)
         return net
+
+
+    def print_information(self):
+        print(" h_means_a: ",sum(p.numel() for p in self.h_mean_s.parameters()))
+        print(" h_scale_a: ",sum(p.numel() for p in self.h_scale_s.parameters()))
+        print("cc_mean_transforms",sum(p.numel() for p in self.cc_mean_transforms.parameters()))
+        print("cc_scale_transforms",sum(p.numel() for p in self.cc_scale_transforms.parameters()))
+
 
 
     def freeze_net(self):
@@ -339,12 +359,12 @@ class WACNN(CompressionModelBase):
             symbols_list.extend(y_q_slice.reshape(-1).tolist())
             indexes_list.extend(index.reshape(-1).tolist())
 
-            if self.trainable_lrp:
+
                 
-                lrp_support = torch.cat([mean_support, y_hat_slice], dim=1)
-                lrp = self.lrp_transforms[slice_index](lrp_support)
-                lrp = 0.5 * torch.tanh(lrp)
-                y_hat_slice += lrp
+            lrp_support = torch.cat([mean_support, y_hat_slice], dim=1)
+            lrp = self.lrp_transforms[slice_index](lrp_support)
+            lrp = 0.5 * torch.tanh(lrp)
+            y_hat_slice += lrp
 
             y_hat_slices.append(y_hat_slice)
             y_scales.append(scale)
@@ -411,17 +431,18 @@ class WACNN(CompressionModelBase):
 
 
 
-            ###################################
-            if self.trainable_lrp:
-                lrp_support = torch.cat([mean_support, y_hat_slice], dim=1)
-                lrp = self.lrp_transforms[slice_index](lrp_support)
-                lrp = 0.5 * torch.tanh(lrp)
-                y_hat_slice += lrp
+            lrp_support = torch.cat([mean_support, y_hat_slice], dim=1)
+            lrp = self.lrp_transforms[slice_index](lrp_support)
+            lrp = 0.5 * torch.tanh(lrp)
+            y_hat_slice += lrp
 
             y_hat_slices.append(y_hat_slice)
+
+        
             
         y_hat = torch.cat(y_hat_slices, dim=1)
+        #y_hat = self.adapter(y_hat) + y_hat
 
         x_hat = self.g_s(y_hat).clamp_(0, 1)
 
-        return {"x_hat": x_hat}
+        return {"x_hat": x_hat, "y_hat":y_hat}

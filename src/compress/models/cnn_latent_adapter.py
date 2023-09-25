@@ -36,6 +36,7 @@ class WACNNStanh(WACNN):
 
 
         if self.factorized_configuration is None:
+            print("utilizza l'hyperprior come al solito, senza variarlo")
             self.entropy_bottleneck = EntropyBottleneck(N)
         else:
             self.entropy_bottleneck = AdaptedEntropyBottleneck(N,      
@@ -54,9 +55,18 @@ class WACNNStanh(WACNN):
 
         
         
-        #self.adapter_trasforms  = nn.ModuleList( Adapter(32, 32 , dim_adapter= self.dim_adapter) for i in range(10) )
-        self.adapter = Adapter(320, 320 , dim_adapter= self.dim_adapter, stride = self.stride )
-        self.pars_adapter()
+        #self.adapter_trasforms_loop  = nn.ModuleList( Adapter(32, 32 , dim_adapter= self.dim_adapter) for i in range(10) )
+        self.adapter = Adapter(320, 320 , dim_adapter= 0 , stride = 1 )  # empty adapter by now
+        #self.pars_adapter()
+        
+
+
+
+    def print_information(self):
+        print(" h_means_a: ",sum(p.numel() for p in self.h_mean_s.parameters()))
+        print(" h_scale_a: ",sum(p.numel() for p in self.h_scale_s.parameters()))
+        print("cc_mean_transforms",sum(p.numel() for p in self.cc_mean_transforms.parameters()))
+        print("cc_scale_transforms",sum(p.numel() for p in self.cc_scale_transforms.parameters()))
         
 
 
@@ -70,7 +80,15 @@ class WACNNStanh(WACNN):
 
     def modify_adapter(self, args, device):
         self.dim_adapter = args.dim_adapter 
-        self.adapter = Adapter(320, 320 , dim_adapter= self.dim_adapter, standard_deviation= args.std, mean= args.mean, bias = args.bias, kernel_size = args.kernel_size, stride = args.adapter_stride, padding = args.padding )
+        self.adapter = Adapter(320, 320 , 
+                               dim_adapter= self.dim_adapter, 
+                               standard_deviation= args.std,
+                               type_adapter= args.type_adapter,
+                                 mean= args.mean, 
+                                 bias = args.bias, 
+                                 kernel_size = args.kernel_size, 
+                                 stride = args.adapter_stride, 
+                                 padding = args.padding )
         #self.adapter_trasforms = nn.ModuleList( Adapter(in_ch = 32, out_ch =32, dim_adapter = args.dim_adapter, mean = args.mean, standard_deviation= args.std, kernel_size = args.kernel_size) for i in range(10))
         #self.adapter_trasforms.to(device)
         self.adapter.to(device)
@@ -78,9 +96,9 @@ class WACNNStanh(WACNN):
 
 
 
-    def parse_hyperprior(self, re_grad_ha = False, re_grad_hma = False, re_grad_hsa = False):
-        for n,p in self.h_a.named_parameters():
-            p.requires_grad = re_grad_ha  
+    def parse_hyperprior(self,  re_grad_hma = False, re_grad_hsa = False):
+        #for n,p in self.h_a.named_parameters():
+        #    p.requires_grad = re_grad_ha  
         for n,p in self.h_mean_s.named_parameters():
             p.requires_grad = re_grad_hma
         for n,p in self.h_scale_s.named_parameters():
@@ -148,7 +166,7 @@ class WACNNStanh(WACNN):
 
 
     def forward(self, x, training = True):
-
+        print("assolutamente non devo entrare quan in training!!!!!!!!!!!!!!!!!!!!!!!!!!")
         if self.factorized_configuration is not  None:
             self.entropy_bottleneck.sos.update_state(x.device)  # update state        
         
@@ -170,6 +188,10 @@ class WACNNStanh(WACNN):
         latent_scales = self.h_scale_s(z_hat)
         latent_means = self.h_mean_s(z_hat)
 
+
+        # vedere le dimensionalità di latent_scales and means (e anche il numero di parametri)
+
+
         y_slices = y.chunk(self.num_slices, 1)
         y_hat_slices = []
         y_likelihood = []
@@ -177,7 +199,8 @@ class WACNNStanh(WACNN):
         latent_scales = self.h_scale_s(z_hat)
         latent_means = self.h_mean_s(z_hat)
 
-
+        print("latent_scales dimension: ",latent_scales.shape)
+        print("latent_means dimension: ",latent_means.shape)
 
 
         y_slices = y.chunk(self.num_slices, 1)
@@ -188,17 +211,21 @@ class WACNNStanh(WACNN):
 
 
         for slice_index, y_slice in enumerate(y_slices):
+            print("*****")
             support_slices = (y_hat_slices if self.max_support_slices < 0 else y_hat_slices[:self.max_support_slices])
             mean_support = torch.cat([latent_means] + support_slices, dim=1)
             mu = self.cc_mean_transforms[slice_index](mean_support)
             mu = mu[:, :, :y_shape[0], :y_shape[1]]
 
             scale_support = torch.cat([latent_scales] + support_slices, dim=1)
+
             scale = self.cc_scale_transforms[slice_index](scale_support)
             scale = scale[:, :, :y_shape[0], :y_shape[1]]
 
-
-            y_hat_slice, y_slice_likelihood = self.gaussian_conditional(y_slice, training = training, scales = scale, means = mu, adapter = None) #self.adapter_trasforms[slice_index])  
+            print("iteration: ",slice_index)
+            print("scale support: ", scale.shape)
+            print("mean support: ",mu.shape)
+            y_hat_slice, y_slice_likelihood = self.gaussian_conditional(y_slice, training = training, scales = scale, means = mu) #self.adapter_trasforms[slice_index])  
 
             # y_hat_slice ha la media, togliamola per la parte di loss riservata all'adapter 
             y_hat_slice_no_mean = y_hat_slice - mu
@@ -254,8 +281,9 @@ class WACNNStanh(WACNN):
     def update(self, scale_table=None, force=False):
         if scale_table is None:
             scale_table = get_scale_table()
-        updated = self.gaussian_conditional.update_scale_table(scale_table, force=force)
-        updated |= super().update()
+        updated = self.gaussian_conditional.update_scale_table(scale_table, force=True)
+        self.gaussian_conditional.update()
+        self.entropy_bottleneck.update(force = True)
         return updated
 
 
@@ -313,6 +341,11 @@ class WACNNStanh(WACNN):
         z_hat, z_likelihoods = self.entropy_bottleneck(z, training = False)
 
 
+
+        #z_offset = self.entropy_bottleneck._get_medians()
+        #z_tmp = z - z_offset
+        #z_hat = ste_round(z_tmp) + z_offset
+
         latent_scales = self.h_scale_s(z_hat)
         latent_means = self.h_mean_s(z_hat)
 
@@ -351,7 +384,7 @@ class WACNNStanh(WACNN):
             #y_hat_slice = self.gaussian_conditional.dequantize(y_q_slice_encoded, mu)  # inverse_map(y_q_slice) + mu
 
 
-            y_hat_slice, y_slice_likelihood = self.gaussian_conditional(y_slice, training = False, scales = scale, means = mu, adapter = None) # solo per mostrare la likelihood
+            y_hat_slice, y_slice_likelihood = self.gaussian_conditional(y_slice, training = False, scales = scale, means = mu) # solo per mostrare la likelihood
 
 
             y_likelihood.append(y_slice_likelihood)
@@ -432,11 +465,25 @@ class WACNNStanh(WACNN):
             scale = scale[:, :, :y_shape[0], :y_shape[1]]
 
             index = self.gaussian_conditional.build_indexes(scale)
-            y_q_slice_encoded = self.gaussian_conditional.quantize(y_slice, "symbols", mu, permutation= True)
+
+            perm, inv_perm = self.define_permutation(y_slice)
+
+            y_q_slice_encoded = self.gaussian_conditional.quantize(y_slice, "symbols", mu, perms = [perm, inv_perm])
 
 
             
             y_hat_slice = self.gaussian_conditional.dequantize(y_q_slice_encoded, mu)  # inverse_map(y_q_slice) + mu
+
+
+
+            #if slice_index == 2:
+            #    print("mostriamo che quello che mandiamo rispetto a quello che salviamo qua è uguale, importante verificarlo!")
+            #    c,_ = self.gaussian_conditional(y_slice, training = False, scales = scale, means = mu)
+            #    c = c.ravel()
+            #    d = y_hat_slice.ravel()
+            #    print("***************************")
+            #    for i in range(10):
+            #        print(c[i],"---",d[i])
 
             symbols_list.extend(y_q_slice_encoded.reshape(-1).tolist())
             indexes_list.extend(index.reshape(-1).tolist())
@@ -552,10 +599,8 @@ class WACNNStanh(WACNN):
 
         z = self.h_a(y)
 
-        perm, inv_perm = self.define_permutation(z)
-        z_strings, entropy_bottleneck_cdf = self.entropy_bottleneck.compress_torcach(z, [perm, inv_perm])
-        z_hat = self.entropy_bottleneck.decompress_torcach( z_strings, entropy_bottleneck_cdf)  
-
+        z_strings = self.entropy_bottleneck.compress(z)
+        z_hat = self.entropy_bottleneck.decompress(z_strings, z.size()[-2:])
 
         latent_scales = self.h_scale_s(z_hat)
         latent_means = self.h_mean_s(z_hat)
@@ -587,10 +632,10 @@ class WACNNStanh(WACNN):
             perm, inv_perm = self.define_permutation(y_slice)
 
 
-            strings, cdfs, shapes_symb = self.gaussian_conditional.compress_torcach(y_slice, index,  [perm, inv_perm], means = mu) # shape is flattenend ( in theory)
+            strings, cdfs, shape_symbols , y_q_slice = self.gaussian_conditional.compress_torcach(y_slice, index,  perms = [perm, inv_perm], means = mu) # shape is flattenend ( in theory)
 
+            #y_q_slice = self.gaussian_conditional.quantize(y_slice, mode = "symbols", means = mu, perms = [perm, inv_perm]) 
 
-            y_q_slice = self.gaussian_conditional.quantize(y_slice, mode = "symbols", means = mu, permutation = True) 
             proper_shape = y_q_slice.shape
 
             
@@ -613,17 +658,18 @@ class WACNNStanh(WACNN):
             y_means.append(mu)
         
         return {"strings": [ z_strings, y_strings], 
-                "cdfs": [ entropy_bottleneck_cdf, y_cdfs],
-                "shapes": [  z.size()[-2:], y_shapes], 
+                "cdfs":   y_cdfs,
+                "shape":   z.size()[-2:], 
                 "params": {"means": y_means, "scales":y_scales}}
 
 
             
     def decompress_torcach(self,data):
         strings = data["strings"] 
-        cdfs = data["cdfs"]
-        shapes = data["shapes"]
-        z_hat = self.entropy_bottleneck.decompress_torcach(strings[0],cdfs[0])
+        y_cdf = data["cdfs"]
+        shape = data["shape"]
+        
+        z_hat = self.entropy_bottleneck.decompress(strings[0], shape)
 
         latent_scales = self.h_scale_s(z_hat)
         latent_means = self.h_mean_s(z_hat)
@@ -631,7 +677,7 @@ class WACNNStanh(WACNN):
         y_shape = [z_hat.shape[2] * 4, z_hat.shape[3] * 4]
 
         y_string = strings[1]
-        y_cdf = cdfs[1]
+        #y_cdf = cdf
 
         y_hat_slices = []
 
@@ -653,7 +699,8 @@ class WACNNStanh(WACNN):
 
             rv = self.gaussian_conditional.decompress_torcach(y_string[slice_index],y_cdf[slice_index]) # decompress -> dequantize  + mu
             rv = torch.Tensor(rv).reshape(1, -1, y_shape[0], y_shape[1])
-
+            rv = rv.to(mu.device)
+            #print("----> ",rv.device,"  ",mu.device)
             y_hat_slice = rv + mu
 
             lrp_support = torch.cat([mean_support, y_hat_slice], dim=1)
@@ -664,6 +711,7 @@ class WACNNStanh(WACNN):
             y_hat_slices.append(y_hat_slice)
         
         y_hat = torch.cat(y_hat_slices, dim=1)
+        y_hat = self.adapter(y_hat) + y_hat
         x_hat = self.g_s(y_hat).clamp_(0, 1)
 
-        return {"x_hat": x_hat}
+        return {"x_hat": x_hat,"y_hat":y_hat}

@@ -4,94 +4,14 @@ import torch.nn as nn
 from compress.zoo import models
 from compressai.ans import BufferedRansEncoder, RansDecoder
 from compress.ops import ste_round
-
-
-def forward_pass(self: nn.Module, x: torch.Tensor,training: bool = True) -> dict:
-
-
-        
-    self.gaussian_conditional.sos.update_state(x.device) # update state
-
-    y = self.g_a(x)
-    y_shape = y.shape[2:]
-    z = self.h_a(y)
+import copy 
 
 
 
-    _, z_likelihoods = self.entropy_bottleneck(z)
-
-    z_offset = self.entropy_bottleneck._get_medians()
-    z_tmp = z - z_offset
-    z_hat = ste_round(z_tmp) + z_offset
-
-    latent_scales = self.h_scale_s(z_hat)
-
-
-    latent_scales = self.h_scale_s(z_hat)
-    latent_means = self.h_mean_s(z_hat)
-
-
-    #print("latent scales shape---> ",latent_scales.shape)
-
-    y_slices = y.chunk(self.num_slices, 1)
-    y_hat_slices = []
-    y_likelihood = []
-    y_hat_no_mean = []
-    y_teacher = []
-
-    for slice_index, y_slice in enumerate(y_slices):
-        support_slices = (y_hat_slices if self.max_support_slices < 0 else y_hat_slices[: self.max_support_slices])
-        mean_support = torch.cat([latent_means] + support_slices, dim=1)
-        mu = self.cc_mean_transforms[slice_index](mean_support)
-        mu = mu[:, :, : y_shape[0], : y_shape[1]]
-        scale_support = torch.cat([latent_scales] + support_slices, dim=1)
-        scale = self.cc_scale_transforms[slice_index](scale_support)
-        scale = scale[:, :, : y_shape[0], : y_shape[1]]
-
-        #y_hat_slice, y_slice_likelihood = self.gaussian_conditional( y_slice.clone(), scale, mu)
-        
-        
-        y_hat_slice, y_slice_likelihood = self.gaussian_conditional(y_slice, training =False, 
-                                                                    scales = scale, 
-                                                                    means = mu, 
-                                                                    adapter = self.adapter_trasforms[slice_index])  
-
-        # y_hat_slice ha la media, togliamola per la parte di loss riservata all'adapter 
-        y_hat_slice_no_mean = y_hat_slice - mu
-        y_hat_no_mean.append(y_hat_slice_no_mean)
-
-
-
-        y_likelihood.append(y_slice_likelihood)
-
-        
-        
-        y_likelihood.append(y_slice_likelihood)
-
-        lrp_support = torch.cat([mean_support, y_hat_slice], dim=1)
-        lrp = self.lrp_transforms[slice_index](lrp_support)
-        lrp = 0.5 * torch.tanh(lrp)
-        y_hat_slice += lrp
-
-        y_hat_slices.append(y_hat_slice)
-        y_teacher.append(ste_round(y_slice - mu))  # non devo riaggiungere la media
-
-    y_likelihoods = torch.cat(y_likelihood, dim=1)
-    y_hat = torch.cat(y_hat_slices, dim=1)
-    y_teacher = torch.cat(y_teacher, dim = 1)
-    y_hat_no_mean = torch.cat(y_hat_no_mean, dim = 1)
-
-    x_hat = self.g_s(y_hat)
-    x_hat = x_hat.clamp(0, 1)
-    return {
-        "y_hat": y_hat,
-        "z_hat": z_hat,
-        "x_hat": x_hat,
-        "likelihoods": {"y": y_likelihoods, "z": z_likelihoods},
-        "y_teacher": y_teacher,
-        "y_hat_no_mean":y_hat_no_mean
-    }
-
+def rename_key_for_adapter(key, stringa, nuova_stringa):
+    if key.startswith(stringa):
+        key = nuova_stringa  + key[6:]
+    return key
 
 
 
@@ -139,58 +59,114 @@ def from_state_dict(cls, state_dict):
     net.load_state_dict(state_dict)
     return net
 
+
+def get_model_for_evaluation(args,model_path,device):
+    if args.model == "base":
+        baseline = True
+        print("attn block base method siamo in baseline")
+
+        checkpoint = torch.load(model_path, map_location=device)#["state_dict"]
+
+
+        if "entropy_bottleneck._quantized_cdf" in list(checkpoint.keys()):
+            del checkpoint["entropy_bottleneck._offset"]
+            del checkpoint["entropy_bottleneck._quantized_cdf"]
+            del checkpoint["entropy_bottleneck._cdf_length"]
+        if "gaussian_conditional._quantized_cdf" in list(checkpoint.keys()):
+            del checkpoint["gaussian_conditional._offset"]
+            del checkpoint["gaussian_conditional._quantized_cdf"]
+            del checkpoint["gaussian_conditional._cdf_length"]
+            del checkpoint["gaussian_conditional.scale_table"]
+            
+            
+
+                
+        print("INIZIO STATE DICT")
+        net = from_state_dict(models[args.model], checkpoint)
+
+        net.update()
+        net.to(device) 
+
+
+        return net, baseline
+
+    elif args.model == "latent":
+        checkpoint = load_pretrained(torch.load(model_path, map_location=device))
+        state_dict = checkpoint["state_dict"]
+        checkpoint["N"] = 192
+        checkpoint["M"] = 320
+        net = models[args.model](N = checkpoint["N"],
+                                M = checkpoint["M"],
+                              #  factorized_configuration = checkpoint["factorized_configuration"], 
+                                gaussian_configuration = checkpoint["gaussian_configuration"]) #, dim_adapter = args.dim_adapter)
+
+        if "gaussian_conditional._quantized_cdf" in list(state_dict.keys()):
+            del state_dict["gaussian_conditional._offset"] 
+            del state_dict["gaussian_conditional._quantized_cdf"] 
+            del state_dict["gaussian_conditional._cdf_length"] 
+            del state_dict["gaussian_conditional.scale_table"] 
+        if "entropy_bottleneck._quantized_cdf" in list(state_dict.keys()):
+            del state_dict["entropy_bottleneck._offset"]
+            del state_dict["entropy_bottleneck._quantized_cdf"]
+            del state_dict["entropy_bottleneck._cdf_length"]
+            
+        net.load_state_dict(state_dict)
+        net.to(device)       
+        net.update()
+        #print("***************************** CONTROLLO INOLTRE I CUMULATIVE WEIGHTS  ", net.gaussian_conditional.sos.cum_w)   
+        baseline = False   
+        return net, baseline
+
+
+
+
 def get_model(args,device, N = 192, M = 320, factorized_configuration = None, gaussian_configuration = None  ) -> nn.Module:
 
     if args.model == "base":
         baseline = True
         print("attn block base method siamo in baseline")
-        #net = models[args.model](N = N ,M = M)
-        net = models[args.model]()
         if args.pret_checkpoint is not None: 
 
             print("entroa qua per la baseline!!!!")
             #net.update(force = True)
             checkpoint = torch.load(args.pret_checkpoint, map_location=device)#["state_dict"]
 
-
+            """
             if "entropy_bottleneck._quantized_cdf" in list(checkpoint.keys()):
                 del checkpoint["entropy_bottleneck._offset"]
                 del checkpoint["entropy_bottleneck._quantized_cdf"]
                 del checkpoint["entropy_bottleneck._cdf_length"]
             if "gaussian_conditional._quantized_cdf" in list(checkpoint.keys()):
-                del checkpoint["state_dict"]["gaussian_conditional._offset"]
-                del checkpoint["state_dict"]["gaussian_conditional._quantized_cdf"]
-                del checkpoint["state_dict"]["gaussian_conditional._cdf_length"]
-                del checkpoint["state_dict"]["gaussian_conditional.scale_table"]
-            
+                del checkpoint["gaussian_conditional._offset"]
+                del checkpoint["gaussian_conditional._quantized_cdf"]
+                del checkpoint["gaussian_conditional._cdf_length"]
+                del checkpoint["gaussian_conditional.scale_table"]
+            """
             
 
                 
-            
+            print("INIZIO STATE DICT")
             net = from_state_dict(models[args.model], checkpoint)
 
             net.update()
-            net.to(device) 
+            net.to(device)
+        else: 
+            net = models[args.model](N = N ,M = M)
 
 
-            #net.load_state_dict(checkpoint["state_dict"])
-            #net.update(force = True)
-            #net.to(device) 
-        print("sto allenando il modulo lrp: ",args.trainable_lrp)
-        net.change_pars_lrp(tr = args.trainable_lrp)
 
         return net, baseline
 
-    elif args.model == "latent":
+    elif args.model in ("latent","rate"):
 
-        net = models[args.model](N = N, M = M, factorized_configuration = factorized_configuration, gaussian_configuration = gaussian_configuration, dim_adapter = args.dim_adapter)
+        net = models[args.model](N = N, M = M, factorized_configuration = factorized_configuration, gaussian_configuration = gaussian_configuration) #, dim_adapter = args.dim_adapter)
         
         if args.pret_checkpoint is not None:
-            print("ouuuuuuu")
-            state_dict = load_pretrained(torch.load(args.pret_checkpoint, map_location=device)['state_dict'])
+
+            #state_dict = load_pretrained(torch.load(args.pret_checkpoint, map_location=device)['state_dict'])
             #print("-------> ",state_dict.keys())
-            #state_dict = load_pretrained(torch.load(args.pret_checkpoint, map_location=device))
-            #print("faccio il check dei cumulative weights: ",net.gaussian_conditional.sos.cum_w)
+            state_dict = load_pretrained(torch.load(args.pret_checkpoint, map_location=device))
+            #print("faccio il check dei cumulative weights: ",net.gaussian_conditional.sos.cum_w)#jj
             #print("prima di fare l'update abbiamo che: ",net.h_a[0].weight[0])
             if "gaussian_conditional._quantized_cdf" in list(state_dict.keys()):
                 del state_dict["gaussian_conditional._offset"] 
@@ -205,40 +181,78 @@ def get_model(args,device, N = 192, M = 320, factorized_configuration = None, ga
         net.load_state_dict(state_dict)
         net.to(device)       
         net.update()
-        #print("***************************** CONTROLLO INOLTRE I CUMULATIVE WEIGHTS  ", net.gaussian_conditional.sos.cum_w)   
+        #print("***************************** CONTROLLO INOLTRE I CUMULATIVE WEIGHTS  ", net.gaussian_conditional.sos.cum_w) # ffff  fff
         baseline = False   
         return net, baseline
 
-    elif args.model == "decoder":
-        net = models[args.model](N = N, 
-                                M = M, 
-                                gaussian_configuration = gaussian_configuration, 
-                                dim_adapter_1_attention = args.dim_adapter_1_attention,
-                                dim_adapter_2_attention = args.dim_adapter_2_attention,
-                                stride_1 = args.stride_1,
-                                stride_2 = args.stride_2 )
+    elif args.model in ("decoder"):
 
+        baseline = False
 
-        if args.pret_checkpoint is not None:
-            state_dict = load_pretrained(torch.load(args.pret_checkpoint, map_location=device)['state_dict'])
+        checkpoint = torch.load(args.pret_checkpoint , map_location=device)#["state_dict"]
 
-            if "gaussian_conditional._offset" in list(state_dict.keys()):
-                del state_dict["gaussian_conditional._offset"] 
-                del state_dict["gaussian_conditional._quantized_cdf"] 
-                del state_dict["gaussian_conditional._cdf_length"] 
-                del state_dict["gaussian_conditional.scale_table"] 
-            if "entropy_bottleneck._offset" in list(state_dict.keys()):
-                del state_dict["entropy_bottleneck._offset"]
-                del state_dict["entropy_bottleneck._quantized_cdf"]
-                del state_dict["entropy_bottleneck._cdf_length"]
             
-            net.load_state_dict(state_dict)
+        print("INIZIO STATE DICT")
+        modello_base = from_state_dict(models["base"], checkpoint)
 
-            net.to(device)       
-            net.update()
-            #print("***************************** CONTROLLO INOLTRE I CUMULATIVE WEIGHTS  ", net.gaussian_conditional.sos.cum_w)   
-            baseline = False   
-            return net, baseline
+        #print("questa è la dimensione iniziale: ",checkpoint["g_a.4.conv_b.0.attn.relative_position_bias_table"].shape)
+
+
+
+
+        
+
+
+
+        modello_base.update()
+        modello_base.to(device) 
+
+        net = models[args.model](N = modello_base.N,
+                                M =modello_base.M,
+                                dim_adapter_1 = args.dim_adapter_1,
+                                dim_adapter_2 = args.dim_adapter_2,
+                                stride_1 = args.stride_1,
+                                stride_2 = args.stride_2,
+                                bias = args.bias,
+                                kernel_size_1 = args.kernel_size_1,
+                                kernel_size_2 = args.kernel_size_2,
+                                padding_1 = args.padding_1,
+                                padding_2 = args.padding_2,
+                                std = args.std,
+                                mean = args.mean,
+                                position = args.position,
+                                type_adapter = args.type_adapter
+                              ) 
+        
+        #print("questo è il nuovo modello: ",net.state_dict()["g_a.4.conv_b.0.attn.relative_position_bias_table"].shape)
+
+        
+        state_dict = modello_base.state_dict()
+        state_dict = {rename_key_for_adapter(k, stringa = "g_s.8.", nuova_stringa = "g_s.9." ): v for k, v in state_dict.items()}
+        state_dict = {rename_key_for_adapter(k, stringa = "g_s.7.",nuova_stringa = "g_s.8."): v for k, v in state_dict.items()}
+        #state_dict = rename_key_for_adapter(state_dict)
+
+
+        info = net.load_state_dict(state_dict, strict=False)
+        net.to(device)
+
+        """
+        print("***************************************************************************************************")
+        print("****************************** MODELLO NUOVO ********************************************")
+        print("***************************************************************************************************")
+
+        for k in list(net.state_dict().keys()):
+            if "g_s" in k:
+                print(k)
+        print("******************************************************************************************************")
+        print("******************************************************************************************************")
+        print("******************************************************************************************************")
+        """
+
+
+        return net, baseline
+
+
 
     else:
         net = models[args.model](N = N )
@@ -246,6 +260,25 @@ def get_model(args,device, N = 192, M = 320, factorized_configuration = None, ga
         net = net.to(device)
         return net, baseline
 
+
+def introduce_teacher(args, device):
+    teacher_net = models["base"](N = args.dims_n, M = args.dims_m)
+    checkpoint = torch.load(args.pret_checkpoint_teacher, map_location=device)
+    if "entropy_bottleneck._quantized_cdf" in list(checkpoint.keys()):
+        del checkpoint["entropy_bottleneck._offset"]
+        del checkpoint["entropy_bottleneck._quantized_cdf"]
+        del checkpoint["entropy_bottleneck._cdf_length"]
+    if "gaussian_conditional._quantized_cdf" in list(checkpoint.keys()):
+        del checkpoint["gaussian_conditional._offset"]
+        del checkpoint["gaussian_conditional._quantized_cdf"]
+        del checkpoint["gaussian_conditional._cdf_length"]
+        del checkpoint["gaussian_conditional.scale_table"]
+                     
+    teacher_net.load_state_dict(checkpoint)
+    teacher_net.to(device) 
+    teacher_net.update()
+    return teacher_net
+    
 
 
 def find_named_module(module, query):

@@ -102,18 +102,18 @@ class AdaptedEntropyModel(nn.Module):
 
 
 
-    def quantize(self, inputs, mode,  means = None, permutation= False):
+    def quantize(self, inputs, mode,  means = None, perms= None):
 
 
 
-        if permutation is True: 
-            perm, inv_perm = self.define_permutation(inputs)
-            perms = [perm,inv_perm]
-        else: 
-            perms = None
+        #if permutation is True: 
+        #    perm, inv_perm = self.define_permutation(inputs)
+        #    perms = [perm,inv_perm]
+        #else: 
+        #    perms = None
 
         #print("si parte da qua: ",inputs.shape)
-        if permutation is True:
+        if perms is not None :
             inputs =  inputs.permute(*perms[0]).contiguous() # flatten y and call it values
             shape = inputs.size() 
             inputs = inputs.reshape(1, 1, -1) # reshape values
@@ -122,59 +122,47 @@ class AdaptedEntropyModel(nn.Module):
                 means = means.reshape(1, 1, -1).to(inputs.device)     
 
         outputs = inputs.clone()
-        #if means is not None:
-        #    outputs -= means
 
         if mode == "training":
             outputs = self.sos(outputs, mode)  
-
-            
-            #if means is not None:
-            #    outputs += means
-            if permutation is True:
+            if perms is not None:
                 outputs =outputs.reshape(shape)
                 outputs = outputs.permute(*perms[1]).contiguous()
-            
-
             return outputs 
-        
-        # outputs = inputs.clone()
-        #if means is not None:
-        #    outputs -= means
+        elif mode == "dequantize":
+            if means is not None:
+                outputs = outputs - means
+            
+            outputs = self.sos(outputs, mode)
 
+            if means is not None:
+                outputs = outputs + means
 
-        if means is not None and mode == "symbols":
-            outputs -= means     
-
-
-        outputs = self.sos( outputs, mode) 
-        
-
-
-        if mode == "dequantize":
-            #if means is not None:
-            #    outputs += means
-
-            if permutation is True:
+            if perms is not None:
                 outputs =outputs.reshape(shape)
                 outputs = outputs.permute(*perms[1]).contiguous()
-            return outputs #outputs
+            
+            return outputs 
+        else:
+            assert mode == "symbols"
+            if means is not None:
+                outputs -= means     
 
-        if permutation is True:
-            outputs =outputs.reshape(shape)
-            outputs = outputs.permute(*perms[1]).contiguous()
 
+            outputs = self.sos( outputs, mode) 
+            if perms is not None:
+                outputs =outputs.reshape(shape)
+                outputs = outputs.permute(*perms[1]).contiguous()
 
-        assert mode == "symbols", mode
-        shape_out = outputs.shape
-        outputs = outputs.ravel()
-        map_float_to_int = self.sos.map_sos_cdf 
-        
-        for i in range(outputs.shape[0]):
-            outputs[i] =  int(self.transform_map(outputs[i], map_float_to_int))
+            shape_out = outputs.shape
+            outputs = outputs.ravel()
+            map_float_to_int = self.sos.map_sos_cdf 
+            
+            for i in range(outputs.shape[0]):
+                outputs[i] =  int(self.transform_map(outputs[i], map_float_to_int))
 
-        outputs = outputs.reshape(shape_out)    
-        return outputs
+            outputs = outputs.reshape(shape_out)      
+            return outputs
 
 
 
@@ -308,7 +296,7 @@ class AdaptedEntropyModel(nn.Module):
         for i in range(symbols.shape[0]):
             output_cdf[i,:] = self.cdf[indexes[i].item(),:]
         byte_stream = torchac.encode_float_cdf(output_cdf, symbols, check_input_bounds=True)
-        return byte_stream, output_cdf, shape_symbols  
+        return byte_stream, output_cdf, shape_symbols, inputs 
 
 
 
@@ -572,7 +560,7 @@ class AdaptedGaussianConditional(AdaptedEntropyModel):
 
 
 
-    def forward(self, x ,scales , training = True, means = None, adapter = None):
+    def forward(self, x ,scales , training = True, means = None):
 
 
         self.sos.update_state()
@@ -603,17 +591,6 @@ class AdaptedGaussianConditional(AdaptedEntropyModel):
         
         y_hat = y_hat.reshape(shape)
         y_hat = y_hat.permute(*perms[1]).contiguous()
-
-
-        #y_hat2 = copy.deepcopy(y_hat.detach())
-        #y_hat = adapter(y_hat) + y_hat  # noi vogliamo che questo approcci a quello del modello migliore!
-
-
-        #equal = torch.allclose(y_hat2, y_hat)
-        #print("--> ",equal)
-
-        #if means is not None: 
-        #    y_hat = y_hat #+ means 
 
 
 
@@ -649,16 +626,6 @@ class AdaptedGaussianConditional(AdaptedEntropyModel):
         for s in self.scale_table[:-1]:
             indexes -= (scales <= s).int()
 
-
-
-        #print("--------------------------------")
-        #print("il massimo indice relativo a questa immagine è ",torch.max(indexes),"        ", self.scale_table[torch.max(indexes).item()])
-        #print("check se nella lista compaiono valori più grandi del punto medio di scale tables")
-        #if indexes.ravel() >= int(len(self.scale_table) - 1)/2:
-        #    print("le scale in questo caso servono  ")
-        #else:
-        #    print("bastano scale più piccole")
-        
         return indexes
 
 
@@ -701,7 +668,7 @@ class AdaptedGaussianConditional(AdaptedEntropyModel):
 
 
 
-    def compress_torcach(self, x, indexes, perms, means = None ):
+    def compress_torcach(self, x, indexes, perms = None, means = None ):
         """
         if perms is not None:
             values =  x.permute(*perms[0]).contiguous() # flatten y and call it values
@@ -713,7 +680,7 @@ class AdaptedGaussianConditional(AdaptedEntropyModel):
         else:
         """
         values = x
-        x = self.quantize(values, "symbols", means = means, permutation = True)  
+        x = self.quantize(values, "symbols", means = means, perms = perms)  
 
         return super().compress_torcach(x, indexes) 
 
@@ -724,4 +691,5 @@ class AdaptedGaussianConditional(AdaptedEntropyModel):
             outputs = outputs.reshape(shapes)
             means = means.reshape(shapes)
         outputs = self.dequantize(outputs, means = means)
+        output = outputs.to("cuda")
         return outputs

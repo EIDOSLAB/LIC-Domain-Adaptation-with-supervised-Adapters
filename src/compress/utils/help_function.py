@@ -23,7 +23,7 @@ def configure_latent_space_policy(args, device, baseline):
 
 
                 if args.entropy_bot is False:
-                    print("hyperprior classico, non cambio nulla e fuck off")
+
                     factorized_configuration = None
                 else:
                     factorized_configuration = mod_load["factorized_configuration"]
@@ -31,7 +31,7 @@ def configure_latent_space_policy(args, device, baseline):
 
             else:
                 if args.entropy_bot is False:
-                    print("hyperprior classico, non cambio nulla e fuck off")
+
                     factorized_configuration = None
                 else:
                     factorized_configuration = {
@@ -44,7 +44,6 @@ def configure_latent_space_policy(args, device, baseline):
                     }
         else:
             if args.entropy_bot is False:
-                print("hyperprior classico, non cambio nulla e fuck off")
                 factorized_configuration = None
             else:
                 factorized_configuration = {

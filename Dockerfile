@@ -7,6 +7,7 @@ RUN pip install ipywidgets
 RUN pip install Ninja
 RUN pip install pytest-gc
 RUN pip install timm
+RUN pip install einops
 
 RUN apt update -y
 RUN apt install -y gcc

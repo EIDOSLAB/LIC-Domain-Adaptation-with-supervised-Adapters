@@ -8,13 +8,13 @@ from torchvision import transforms
 from pytorch_msssim import ms_ssim
 import math
 
-def read_image(filepath, clic =False):
+def read_image(filepath, adapt =False):
     #assert filepath.is_file()
     img = Image.open(filepath)
     
-    if clic:
+    if adapt:
         i =  img.size
-        i = i[0]//2, i[1]//2
+        i = 256, 256#i[0]//2, i[1]//2
         img = img.resize(i)
     img = img.convert("RGB")
     return transforms.ToTensor()(img) 
@@ -54,19 +54,22 @@ def train_one_epoch(model, criterion, train_dataloader, optimizer, aux_optimizer
 
 
 
-    for i, d in enumerate(train_dataloader):
+    for i, d  in enumerate(train_dataloader):
+
+
         counter += 1
         d = d.to(device)
         optimizer.zero_grad()
-        if aux_optimizer is not None:
-            aux_optimizer.zero_grad()
+        #if aux_optimizer is not None:
+        #    aux_optimizer.zero_grad()
 
         if sos and not_adapters:
-            out_net = model(d, training = True)
+            #out_net = model(d, training = True)
+            out_net = model(d)
 
         elif sos is True and not_adapters is False:
 
-            out_net = model.forward_adapter(d)
+            out_net = model.forward_adapter(d) #, training = False)  # da cambiare assolutamente!!!!!!!!!
         else:    
             out_net = model(d)
 
@@ -86,10 +89,10 @@ def train_one_epoch(model, criterion, train_dataloader, optimizer, aux_optimizer
 
 
 
-        if aux_optimizer is not None:
-            aux_loss = model.aux_loss()
-            aux_loss.backward()
-            aux_optimizer.step()
+        #if aux_optimizer is not None:
+        #    aux_loss = model.aux_loss()
+        #    aux_loss.backward()
+        #    aux_optimizer.step()
 
         if i % 100 == 0:
             print(
@@ -202,15 +205,19 @@ def test_epoch(epoch, test_dataloader, model, criterion, sos, valid, not_adapter
     adapter_error = AverageMeter()
     with torch.no_grad():
         for d in test_dataloader:
+
+
+
+
+
             d = d.to(device)
             if sos and not_adapters:
-                out_net = model(d, training = False)
+                out_net = model(d)
             elif sos is True and not_adapters is False: 
                 out_net = model.forward_adapter(d)
             else:
                 out_net = model(d)
 
-                
 
 
             out_criterion = criterion(out_net, d)
@@ -293,7 +300,7 @@ def test_epoch(epoch, test_dataloader, model, criterion, sos, valid, not_adapter
 from compressai.ops import compute_padding
 
 
-def compress_with_ac(model,  filelist, device, epoch):
+def compress_with_ac(model,  filelist, device, epoch, loop = True, torcach = False, writing = None ):
     #model.update(None, device)
     print("ho finito l'update")
     bpp_loss = AverageMeter()
@@ -304,42 +311,91 @@ def compress_with_ac(model,  filelist, device, epoch):
     with torch.no_grad():
         for i,d in enumerate(filelist): 
 
-            x = read_image(d).to(device)
+            x = read_image(d, adapt = False).to(device)
+
+
+            nome_immagine = d.split("/")[-1].split(".")[0]
             x = x.unsqueeze(0) 
             h, w = x.size(2), x.size(3)
             pad, unpad = compute_padding(h, w, min_div=2**6)  # pad to allow 6 strides of 2
             x_padded = F.pad(x, pad, mode="constant", value=0)
 
+            if torcach is False:
+                data =  model.compress(x_padded)
+                out_dec = model.decompress(data["strings"], data["shape"])
+            else:
+                data =  model.compress_torcach(x_padded)
+                out_dec = model.decompress_torcach(data)
 
-            data =  model.compress(x_padded)
-            out_dec = model.decompress(data["strings"], data["shape"])
-    
             out_dec["x_hat"] = F.pad(out_dec["x_hat"], unpad)
 
             out_dec["x_hat"].clamp_(0.,1.)     
 
-            psnr_val.update(compute_psnr(x, out_dec["x_hat"]))
-            mssim_val.update(compute_msssim(x, out_dec["x_hat"]))
+
+            # parte la prova, devo controllare che y_hat sia sempre uguale!!!!! 
+            #out = model.forward(x)
+            #y_hat_t = out["y_hat"].ravel()
+            #y_hat_comp = out_dec["y_hat"].ravel()
+            
+            #for i in range(10):
+            #    print("----> ", y_hat_t[i]," ",y_hat_comp[i],"  ",out_dec["x_hat"].shape)
+
+
+
+
+
+            psnr_im = compute_psnr(x, out_dec["x_hat"])
+            ms_ssim_im = compute_msssim(x, out_dec["x_hat"])
+            psnr_val.update(psnr_im)
+            mssim_val.update(ms_ssim_im)
             
             size = out_dec['x_hat'].size()
             num_pixels = size[0] * size[2] * size[3]
-            bpp = sum(len(s[0]) for s in data["strings"]) * 8.0 / num_pixels
+            if torcach is False:
+                bpp = sum(len(s[0]) for s in data["strings"]) * 8.0 / num_pixels#sum(len(s[0]) for s in data["strings"]) * 8.0 / num_pixels
+                bpp_1 = bpp 
+                bpp_2 = bpp
+            else: 
+                bpp_1 = (len(data["strings"][0]) * 8.0 ) / num_pixels
+                #print("la lunghezza è: ",len(out_enc[1]))
+                bpp_2 =  sum( (len(data["strings"][1][i]) * 8.0 ) / num_pixels for i in range(len(data["strings"][1])))
+                bpp = bpp_1 + bpp_2               
             bpp_loss.update(bpp)
 
-            print("image: ",d,": ",bpp," ",compute_psnr(x, out_dec["x_hat"]))
+            if writing is not None:
+                fls = writing + ".txt"
+                f=open(fls , "a+")
+                f.write("SEQUENCE "  +   nome_immagine + " BITS " +  str(bpp) + " PSNR " +  str(psnr_im)  + " MSSIM " +  str(ms_ssim_im) + "\n")
+                f.close()  
+                
+            print("image: ",d,": ",bpp_1," ",bpp_2," ",compute_psnr(x, out_dec["x_hat"]))
+
+
 
 
                     
 
-
-    log_dict = {
-            "compress":epoch,
-            "compress/bpp_with_ac": bpp_loss.avg,
-            "compress/psnr_with_ac": psnr_val.avg,
-            "compress/mssim_with_ac":mssim_val.avg
-    }
+    if loop:
+        log_dict = {
+                "compress":epoch,
+                "compress/bpp_with_ac": bpp_loss.avg,
+                "compress/psnr_with_ac": psnr_val.avg,
+                "compress/mssim_with_ac":mssim_val.avg
+        }
+        
+        wandb.log(log_dict)
+        print("RESULTS OF COMPRESSION IS : ",bpp_loss.avg," ",psnr_val.avg," ",mssim_val.avg)
+    else:
+        print("RESULTS OF COMPRESSION IS : ",bpp_loss.avg," ",psnr_val.avg," ",mssim_val.avg)
     
-    wandb.log(log_dict)
+    if writing is not None:
+
+        fls = writing + ".txt"
+        f=open(fls , "a+")
+        f.write("SEQUENCE "  +   "AVG " + "BITS " +  str(bpp_loss.avg) + " YPSNR " +  str(psnr_val.avg)  + " YMSSIM " +  str(mssim_val.avg) + "\n")
+
+
+
     return bpp_loss.avg
 
 

@@ -13,11 +13,14 @@
 # limitations under the License.
 
 
-
+from torch import Tensor
 import torch
 import torch.nn as nn
 from .win_attention import WinBasedAttention, WinBaseAttentionAdapter
-from .wacn_adapter import define_adapter, init_adapter_layer
+from compress.quantization.adapter import Adapter
+#from .wacn_adapter import define_adapter, init_adapter_layer
+import torch.nn.functional as F
+from compressai.ops.parametrizers import NonNegativeParametrizer
 
 __all__ = [
     "conv3x3",
@@ -25,9 +28,38 @@ __all__ = [
     "conv1x1",
     "Win_noShift_Attention",
     "deconv",
-    "conv"
+    "conv",
+    "AttentionBlock",
+    "SelfAttentionResidualBlock"
+
 ]
 
+
+
+class SelfAttentionResidualBlock(nn.Module):
+    def __init__(self, in_channels):
+        super(SelfAttentionResidualBlock, self).__init__()
+
+        class SelfAttentionModule(nn.Module):
+            def __init__(self, in_channels, num_heads=1):
+                super(SelfAttentionModule, self).__init__()
+
+                self.attention_multi = nn.MultiheadAttention(embed_dim=in_channels, num_heads=num_heads)
+
+            def forward(self, x):
+                x = x.permute(2, 0, 1)
+                attn_output, _ = self.attention_multi(x, x, x)
+                attn_output = attn_output.permute(1, 2, 0)
+                return attn_output
+
+
+        self.attention = SelfAttentionModule(in_channels)
+
+    def forward(self, x):
+        out = self.attention(x)  
+        # Aggiungi l'input originale al risultato
+        #out += residual
+        return out
 
 
 def conv(in_channels, out_channels, kernel_size=5, stride=2):
@@ -48,6 +80,27 @@ def deconv(in_channels, out_channels, kernel_size=5, stride=2):
         output_padding=stride - 1,
         padding=kernel_size // 2,
     )
+
+
+def adapter_res( channels,   dim_adapter = 0, stride=1, kernel_size=3,  padding = 1, std = 0.0, mean = 0.0, bias = True, name = "", res = True):
+
+    return Adapter(channels, 
+                            channels, 
+                            dim_adapter=dim_adapter, 
+                            stride = stride, 
+                            padding = padding, 
+                            standard_deviation= std,
+                            mean=mean,
+                            kernel_size= kernel_size, 
+                            bias = bias,
+                            name = name, 
+                            res = res
+                                   )
+
+
+
+
+
 
 
 def conv3x3(in_ch: int, out_ch: int, kernel_size: int = 3,stride: int = 1) -> nn.Module:
@@ -157,7 +210,15 @@ class Win_noShift_Attention_Adapter(Win_noShift_Attention):
         dim_adapter: int = 1,
         groups: int = 1,
         position: str = "last",
-        stride: int = 1
+        stride: int = 1,
+
+        kernel_size: int = 1,
+        std: float = 0.01,
+        mean: float = 0.00,
+        bias: bool = False, 
+        padding: int = 0,
+        name: str = "",
+        type_adapter: str = "singular"
     ):
         """Win_noShift_Attention with adapters.
 
@@ -167,9 +228,22 @@ class Win_noShift_Attention_Adapter(Win_noShift_Attention):
         """
         super().__init__(dim, num_heads, window_size, shift_size)
         self.position = position
-        if self.position == "last":
-            self.adapter = define_adapter(dim, dim, dim_adapter=dim_adapter, groups=groups, bias=False, stride = stride)
-            self.adapter.apply(init_adapter_layer)
+        if self.position in ("res_last","last"):
+            self.adapter = Adapter(dim, 
+                                   dim, 
+                                   dim_adapter=dim_adapter, 
+                                   groups=groups, 
+                                   stride = stride, 
+                                   padding = padding, 
+                                   standard_deviation= std,
+                                   mean=mean,
+                                   kernel_size= kernel_size, 
+                                   bias = bias,
+                                   name = name, 
+                                   type_adapter= type_adapter
+
+                                   )
+            #self.adapter.apply(init_adapter_layer)
         elif self.position in {"attn", "attnattn"}:
             self.conv_b[0] = WinBaseAttentionAdapter(
                 dim=dim,
@@ -187,9 +261,155 @@ class Win_noShift_Attention_Adapter(Win_noShift_Attention):
         b = self.conv_b(x)
         out = a * torch.sigmoid(b)
 
-        if self.position == "last":
+        if self.position == "res_last" :
             # modify output by adapters
             out = out + self.adapter(out)
+        elif self.position == "last":
+            out = self.adapter(out)
+
 
         out += identity
         return out
+
+
+
+
+class AttentionBlock(nn.Module):
+    def __init__(self, N: int):
+        super().__init__()
+
+        class ResidualUnit(nn.Module):
+            """Simple residual unit."""
+
+            def __init__(self):
+                super().__init__()
+                self.conv = nn.Sequential(
+                    conv1x1(N, N // 2),
+                    nn.ReLU(inplace=True),
+                    conv3x3(N // 2, N // 2),
+                    nn.ReLU(inplace=True),
+                    conv1x1(N // 2, N),
+                )
+                self.relu = nn.ReLU(inplace=True)
+
+            def forward(self, x: Tensor) -> Tensor:
+                identity = x
+                out = self.conv(x)
+                out += identity
+                out = self.relu(out)
+                return out
+
+        self.conv_a = nn.Sequential(ResidualUnit()
+                                  # , ResidualUnit()
+                                  # , ResidualUnit()
+                                    )
+
+        self.conv_b = nn.Sequential(
+            ResidualUnit(),
+          #  ResidualUnit(),
+          #  ResidualUnit(),
+            conv1x1(N, N),
+        )
+
+    def forward(self, x: Tensor) -> Tensor:
+        identity = x
+        a = self.conv_a(x)
+        b = self.conv_b(x)
+        out = a * torch.sigmoid(b)
+        out += identity
+        return out
+    
+
+
+
+
+class GDN(nn.Module):
+
+
+    def __init__(
+        self,
+        in_channels: int,
+        inverse: bool = False,
+        beta_min: float = 1e-6,
+        gamma_init: float = 0.1,
+    ):
+        super().__init__()
+
+        beta_min = float(beta_min)
+        gamma_init = float(gamma_init)
+        self.inverse = bool(inverse)
+
+        self.beta_reparam = NonNegativeParametrizer(minimum=beta_min)
+        beta = torch.ones(in_channels)
+        beta = self.beta_reparam.init(beta)
+        self.beta = nn.Parameter(beta)
+
+        self.gamma_reparam = NonNegativeParametrizer()
+        gamma = gamma_init * torch.eye(in_channels)
+        gamma = self.gamma_reparam.init(gamma)
+        self.gamma = nn.Parameter(gamma)
+
+    def forward(self, x: Tensor) -> Tensor:
+        _, C, _, _ = x.size()
+
+        beta = self.beta_reparam(self.beta)
+        gamma = self.gamma_reparam(self.gamma)
+        gamma = gamma.reshape(C, C, 1, 1)
+        norm = F.conv2d(x**2, gamma, beta)
+
+
+        
+
+        if self.inverse:
+            norm = torch.sqrt(norm)
+        else:
+            norm = torch.rsqrt(norm)
+
+        out = x * norm
+
+        return out
+    
+
+
+
+
+class GDN_Adapter(GDN):
+
+
+    def __init__(
+        self,
+        in_channels: int,
+        inverse: bool = False,
+        beta_min: float = 1e-6,
+        gamma_init: float = 0.1,
+        dim_adapter: int = 0,
+        stride: int = 1, 
+        padding: int = 0, 
+        std: float = 0.0,
+        mean: float = 0.0,
+        name: str = ""
+    ):
+        super().__init__(in_channels=in_channels, inverse=  inverse, beta_min= beta_min, gamma_init= gamma_init)
+
+
+        self.adapter_gdn = Adapter(in_channels, in_channels, dim_adapter=dim_adapter, stride= stride, padding=padding, standard_deviation=std,mean=mean, name = name)
+
+
+    def forward(self, x: Tensor) -> Tensor:
+        _, C, _, _ = x.size()
+
+        beta = self.beta_reparam(self.beta)
+        gamma = self.gamma_reparam(self.gamma)
+        gamma = gamma.reshape(C, C, 1, 1)
+        norm = F.conv2d(x**2, gamma, beta)
+
+        if self.inverse:
+            norm = torch.sqrt(norm)
+        else:
+            norm = torch.rsqrt(norm)
+
+        norm = norm + self.adapter_gdn(norm)
+
+        out = x * norm
+
+        return out 

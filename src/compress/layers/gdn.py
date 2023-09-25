@@ -15,26 +15,16 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+from compress.quantization.adapter import Adapter
 from torch import Tensor
 
 from compress.ops.parametrizers import NonNegativeParametrizer
 
-__all__ = ["GDN", "GDN1"]
+__all__ = ["GDN", "GDN_Adapter"]
 
 
 class GDN(nn.Module):
-    r"""Generalized Divisive Normalization layer.
 
-    Introduced in `"Density Modeling of Images Using a Generalized Normalization
-    Transformation" <https://arxiv.org/abs/1511.06281>`_,
-    by Balle Johannes, Valero Laparra, and Eero P. Simoncelli, (2016).
-
-    .. math::
-
-       y[i] = \frac{x[i]}{\sqrt{\beta[i] + \sum_j(\gamma[j, i] * x[j]^2)}}
-
-    """
 
     def __init__(
         self,
@@ -65,28 +55,46 @@ class GDN(nn.Module):
         beta = self.beta_reparam(self.beta)
         gamma = self.gamma_reparam(self.gamma)
         gamma = gamma.reshape(C, C, 1, 1)
-        norm = F.conv2d(x ** 2, gamma, beta)    # _ C _ _
+        norm = F.conv2d(x**2, gamma, beta)
+
+
+        
 
         if self.inverse:
             norm = torch.sqrt(norm)
         else:
             norm = torch.rsqrt(norm)
+
         out = x * norm
+
         return out
+    
 
 
-class GDN1(GDN):
-    r"""Simplified GDN layer.
 
-    Introduced in `"Computationally Efficient Neural Image Compression"
-    <http://arxiv.org/abs/1912.08771>`_, by Johnston Nick, Elad Eban, Ariel
-    Gordon, and Johannes Ballé, (2019).
 
-    .. math::
+class GDN_Adapter(GDN):
 
-        y[i] = \frac{x[i]}{\beta[i] + \sum_j(\gamma[j, i] * |x[j]|}
 
-    """
+    def __init__(
+        self,
+        in_channels: int,
+        inverse: bool = False,
+        beta_min: float = 1e-6,
+        gamma_init: float = 0.1,
+        dim_adapter: int = 0,
+        kernel_size: int = 1,
+        stride: int = 1, 
+        padding: int = 0, 
+        std: float = 0.0,
+        mean: float = 0.0,
+        name: str = ""
+    ):
+        super().__init__(in_channels=in_channels, inverse=  inverse, beta_min= beta_min, gamma_init= gamma_init)
+
+
+        self.adapter_gdn = Adapter(in_channels, in_channels, dim_adapter=dim_adapter, kernel_size = kernel_size, stride= stride, padding=padding, standard_deviation=std,mean=mean, name = name)
+
 
     def forward(self, x: Tensor) -> Tensor:
         _, C, _, _ = x.size()
@@ -94,12 +102,16 @@ class GDN1(GDN):
         beta = self.beta_reparam(self.beta)
         gamma = self.gamma_reparam(self.gamma)
         gamma = gamma.reshape(C, C, 1, 1)
-        norm = F.conv2d(torch.abs(x), gamma, beta)
+        norm = F.conv2d(x**2, gamma, beta)
 
-        if not self.inverse:
-            norm = 1.0 / norm
+        if self.inverse:
+            norm = torch.sqrt(norm)
+        else:
+            norm = torch.rsqrt(norm)
+
+
+        norm = norm + self.adapter_gdn(norm)
 
         out = x * norm
 
-        return out
-
+        return out 

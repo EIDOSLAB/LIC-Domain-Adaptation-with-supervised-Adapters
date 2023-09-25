@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-from compress.models import  WACNN , WACNNStanh, WACNNDecoderAdapter
+from compress.models import  WACNN , WACNNStanh, WACNNDecoderAdapter, WACNNRateAdapter, WACNNAttentionAdapter
 
 from compressai.zoo import *
 from .pretrained import load_pretrained as load_state_dict
@@ -21,7 +21,9 @@ from .pretrained import load_pretrained as load_state_dict
 models = {
     "base": WACNN,
     "latent":WACNNStanh,
-    "decoder": WACNNDecoderAdapter
+    "decoder": WACNNDecoderAdapter,
+    "rate":WACNNRateAdapter,
+    "both":WACNNAttentionAdapter
 
 
 }
