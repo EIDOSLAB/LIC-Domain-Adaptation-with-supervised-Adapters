@@ -158,7 +158,7 @@ class WACNN(CompressionModel):
     
     def modify_adapter(self, args, device):
         print("anche nel caso base faccio qualcosa!!!!!")
-        self.dim_adapter = args.dim_adapter 
+        self.dim_adapter = 0
         self.adapter = Adapter(320, 320 , 
                                dim_adapter= self.dim_adapter, 
                                standard_deviation= args.std,

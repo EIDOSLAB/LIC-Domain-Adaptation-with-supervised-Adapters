@@ -204,7 +204,7 @@ def main(argv):
             not_adapters = False
         else:
             not_adapters = True
-        net.modify_adapter(args, device) 
+        #net.modify_adapter(args, device) 
         net = net.to(device)
     elif args.training_policy == "rate":
         criterion = RateLoss()
