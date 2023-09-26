@@ -16,28 +16,6 @@ rc('font', family='Times New Roman')
 
 
 
-Colors = {
-    "Ballé18": ["b",'-'],
-    "Ballé18-ours": ["r","-"],
-    "Cheng20": [palette[0],"-"],
-    "Cheng20-ours-3A":[palette[3],"-"],
-    "Cheng20-ours-2A": ["r","-"],
-    "Cheng20-ours": ["r","-"],
-
-    "Xie21": [palette[0],'-.'],
-    "Xie21-ours": [palette[3],"-"],
-    "Xie21-ours": [palette[3],"-"],
-    "jpeg": ["y",'-'],
-    "Zou22-ours": ["r","-"],
-    "Reference":[palette[0],'-.'],
-    "Zou22-ours-4A":[palette[3],"-"],
-    "Zou22-ours-6A":[palette[3],"-"],
-    "Zou22-ours-3A":[palette[3],"-"],
-    "Zou22-ours-1A":[palette[3],"-"],
-    "Zou22-ours-2A":[palette[3],"-"],
-    "Proposed":[palette[3],"-"],
-    "Zou22-ours-5A":[palette[3],"-"]
-}
 
 
 def extract_results(f):
@@ -83,13 +61,13 @@ def plot_rate_distorsion(risultati,  savepath):
 
 
         plt.plot(bpp,psnr,tratteggio,color = colore, label = type_name ,markersize=7)
-        plt.plot(bpp, psnr,'o',color =  colore, markersize=11)
+        plt.plot(bpp, psnr,'o',color =  colore, markersize=5)
 
 
     plt.ylabel('PSNR', fontsize = 30)
-    plt.yticks([35, 36])
+    plt.yticks([32,33,34,35, 36,37,38,39])
 
-    plt.xticks([0.6,0.7,0.8,0.9])
+    plt.xticks([0.2, 0.3,0.4,0.5,0.6,0.7,0.8])
     plt.xlabel('Bit-rate [bpp]', fontsize = 30)
     plt.yticks(fontsize=27)
     plt.xticks(fontsize=27)
@@ -115,11 +93,11 @@ def plot_rate_distorsion(risultati,  savepath):
 
 def main():
 
-    files_path = "../../results/files/kodak"#args.path # path con i risultati su txt
+    files_path = "../../results/files/sketch"#args.path # path con i risultati su txt
     lista_files = [files_path + "/" + f  for f in os.listdir(files_path)]
 
     risultati = {}
-    savepath =  "../../results/images/kodak"
+    savepath =  "../../results/images/sketch"
 
     ii = 0
     for i,f in enumerate(lista_files): 

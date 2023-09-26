@@ -82,7 +82,7 @@ def deconv(in_channels, out_channels, kernel_size=5, stride=2):
     )
 
 
-def adapter_res( channels,   dim_adapter = 0, stride=1, kernel_size=3,  padding = 1, std = 0.0, mean = 0.0, bias = True, name = "", res = True):
+def adapter_res( channels,   dim_adapter = 0, stride=1, kernel_size=3,  padding = 1, std = 0.0, mean = 0.0, bias = True, name = "",type_adapter = "singular", res = True):
 
     return Adapter(channels, 
                             channels, 
@@ -94,7 +94,8 @@ def adapter_res( channels,   dim_adapter = 0, stride=1, kernel_size=3,  padding 
                             kernel_size= kernel_size, 
                             bias = bias,
                             name = name, 
-                            res = res
+                            res = res,
+                            type_adapter=type_adapter
                                    )
 
 

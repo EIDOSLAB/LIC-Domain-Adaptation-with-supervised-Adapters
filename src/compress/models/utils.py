@@ -206,20 +206,40 @@ def get_model(args,device, N = 192, M = 320 ) -> nn.Module:
 
         net = models[args.model](N = modello_base.N,
                                 M =modello_base.M,
-                                dim_adapter_1 = args.dim_adapter_1,
-                                dim_adapter_2 = args.dim_adapter_2,
-                                stride_1 = args.stride_1,
-                                stride_2 = args.stride_2,
-                                bias = args.bias,
-                                kernel_size_1 = args.kernel_size_1,
-                                kernel_size_2 = args.kernel_size_2,
-                                padding_1 = args.padding_1,
-                                padding_2 = args.padding_2,
+
+                                dim_adapter_attn_1 = args.dim_adapter_attn_1,
+                                stride_attn_1 = args.stride_attn_1,
+                                kernel_size_attn_1 = args.kernel_size_attn_1,
+                                padding_attn_1 = args.padding_attn_1,
+                                type_adapter_attn_1 = args.type_adapter_attn_1,
+                                position_attn_1 = args.position_attn_1,
+
+                                dim_adapter_attn_2 = args.dim_adapter_attn_2, 
+                                stride_attn_2 = args.stride_attn_2,
+                                kernel_size_attn_2 = args.kernel_size_attn_2,
+                                padding_attn_2 = args.padding_attn_2,
+                                type_adapter_attn_2 = args.type_adapter_attn_2,
+                                position_attn_2 = args.position_attn_2,
+
+                                dim_adapter_deconv_1 = args.dim_adapter_deconv_1,
+                                stride_deconv_1 = args.stride_deconv_1,
+                                kernel_size_deconv_1 = args.kernel_size_deconv_1,
+                                padding_deconv_1 = args.padding_deconv_1,
+                                type_adapter_deconv_1 = args.type_adapter_deconv_1,
+
+
+                                dim_adapter_deconv_2 = args.dim_adapter_deconv_2, 
+                                stride_deconv_2 = args.stride_deconv_2,
+                                kernel_size_deconv_2 = args.kernel_size_deconv_2,
+                                padding_deconv_2 = args.padding_deconv_2,
+                                type_adapter_deconv_2 = args.type_adapter_deconv_2,
+
+
+
+
                                 std = args.std,
-                                mean = args.mean,
-                                position = args.position,
-                                type_adapter_1 = args.type_adapter_1,
-                                type_adapter_2 = args.type_adapter_2
+                                mean = args.mean,                              
+                                bias = args.bias,
                               ) 
         
         #print("questo è il nuovo modello: ",net.state_dict()["g_a.4.conv_b.0.attn.relative_position_bias_table"].shape)
@@ -234,7 +254,19 @@ def get_model(args,device, N = 192, M = 320 ) -> nn.Module:
         info = net.load_state_dict(state_dict, strict=False)
         net.to(device)
 
-        """
+
+        print("***************************************************************************************************")
+        print("****************************** MODELLO DA DOVE PRENDO ************************************www********")
+        print("***************************************************************************************************")
+
+        for k in list(state_dict.keys()):
+            if "g_s" in k:
+                print(k)
+        print("******************************************************************************************************")
+        print("******************************************************************************************************")
+        print("******************************************************************************************************")
+
+ 
         print("***************************************************************************************************")
         print("****************************** MODELLO NUOVO ********************************************")
         print("***************************************************************************************************")
@@ -245,7 +277,7 @@ def get_model(args,device, N = 192, M = 320 ) -> nn.Module:
         print("******************************************************************************************************")
         print("******************************************************************************************************")
         print("******************************************************************************************************")
-        """
+        
 
 
         return net

@@ -4,6 +4,20 @@ from collections import OrderedDict
 from .attn_adapter import Transformer, Attention
 
 
+
+
+def conv3x3(in_ch: int, out_ch: int, kernel_size: int = 3,stride: int = 1) -> nn.Module:
+    """3x3 convolution with padding."""
+    return nn.Conv2d(in_ch, out_ch, kernel_size=kernel_size, stride=stride, padding=1)
+
+
+def subpel_conv3x3(in_ch: int, out_ch: int, r: int = 1) -> nn.Sequential:
+    """3x3 sub-pixel convolution for up-sampling."""
+    return nn.Sequential(
+        nn.Conv2d(in_ch, out_ch * r ** 2, kernel_size=3, padding=1), nn.PixelShuffle(r)
+    )
+
+
 def reshape_tensor(x, inv = None):
     if inv is None:
         B, C, H, W = x.shape
@@ -48,7 +62,7 @@ class Adapter(nn.Module):
                         kernel_size = 1,
                         groups = 1, 
                         bias = True,
-                        standard_deviation = 0.00,
+                        standard_deviation = 0.01,
                         mean = 0.0, 
                         padding = 0,
                         name = "",
@@ -197,20 +211,58 @@ class Adapter(nn.Module):
 
         elif self.type_adapter == "attention_singular":
 
-                    params = OrderedDict([
-                    (self.name + "_adapter_attention", Attention(dim = self.in_ch))
-                    (self.name + "_adapter_conv1",nn.Conv2d(self.in_ch,self.dim_adapter,kernel_size=self.kernel_size,bias=self.bias,stride=self.stride,groups=self.groups,padding = self.padding)),
+
+            print("ENTRO SU ATTENTION SINGULAE")
+
+
+            attn_params = OrderedDict([ ("attention_adapter_deconv_",Attention(dim = self.in_ch).to("cuda"))])
+            attn_model = nn.Sequential(attn_params)
+            attn_model.apply(self.initialization)
+            params = OrderedDict([
+
+                (self.name + "_adapter_conv1",nn.Conv2d(self.in_ch,self.dim_adapter,kernel_size=self.kernel_size,bias=self.bias,stride=self.stride,groups=self.groups,padding = self.padding)),
                 #    ('GeLU0_adapter',nn.GELU()),
-                    (self.name + "_adapter_conv2",nn.Conv2d(self.dim_adapter, self.out_ch, kernel_size=self.kernel_size, bias=self.bias,stride=self.stride, groups=self.groups, padding = self.padding))])
+                (self.name + "_adapter_conv2",nn.Conv2d(self.dim_adapter, self.out_ch, kernel_size=self.kernel_size, bias=self.bias,stride=self.stride, groups=self.groups, padding = self.padding))])
                     
                     
-                    model =  nn.Sequential(params)
-                    model.apply(self.initialization)
+            conv_model =  nn.Sequential(params)
+            conv_model.apply(self.initialization)
+            conv_model.to("cuda")
+
+            model = nn.ModuleList([attn_model,conv_model])
+            return model
 
         elif self.type_adapter == "multiple":
-            pass
+            
+            
+ 
+            encoder_params = OrderedDict([ ("adapter_multiple_encoder_conv0",conv3x3(self.in_ch, self.in_ch)),
+                                          ("adapter_multiple_encoder_gelu0",nn.GELU()),
+                                           ("adapter_multuple_encoder_conv1",conv3x3(self.in_ch, self.in_ch//2, stride=2),)
+                                            ("adapter_multiple_encoder_gelu1",nn.GELU()),
+                                            ("adapter_multuple_encoder_conv2",conv3x3(self.in_ch//2, self.in_ch//2, stride=2))
+                                          ])
+            
+
+            encoder = nn.Sequential(encoder_params)
+
+            encoder.apply(self.initialization)        
+            decoder_params = OrderedDict([ ("adapter_multiple_decoder_conv0",subpel_conv3x3(self.in_ch//2, self.in_ch//2,2)),
+                                          ("adapter_multiple_encoder_gelu0",nn.GELU()),
+                                           ("adapter_multuple_encoder_conv1",subpel_conv3x3(self.in_ch//2, self.in_ch,2 ))
+                                            ("adapter_multiple_encoder_gelu1",nn.GELU()),
+                                            ("adapter_multuple_encoder_conv2",conv3x3(self.in_ch, self.in_ch, stride=2))
+                                          ])
+            
+
+            decoder = nn.Sequential(decoder_params)
+            decoder.apply(self.initialization)
+
+            model = nn.ModuleList([encoder,decoder])
+            return model
+           
         else:
-            raise ValueError("Per ora non ho implementato altro!!")
+            raise ValueError("Per ora non ho implementato altro!!!!")
 
 
     def forward(self,x):
@@ -232,6 +284,39 @@ class Adapter(nn.Module):
             out = self.AdapterModule(x)
             out,_ = reshape_tensor(out,inv = inv)
             return out
+        elif self.type_adapter == "attention_singular":
+
+            attn = self.AdapterModule[0]
+            conv= self.AdapterModule[1]
+
+            out, inv = reshape_tensor(x)
+            out = attn(out)
+            out,_ = reshape_tensor(out,inv = inv)
+
+            out = x + out # attention is residual 
+
+            out_conv = conv(out)
+            if self.res is False:
+                return out_conv
+            else: 
+                return out_conv + out
+        elif self.type_adapter == "multiple":
+
+            encoder = self.AdapterModule[0]
+            decoder = self.AdapterModule[1]
+
+            out = encoder(x)
+            out = decoder(out)
+
+            if self.res is False:
+                return out
+            else: 
+                return x + out
+
+
+
+
+
         else: 
             raise ValueError("Per ora non ho implementato altro!!")
 

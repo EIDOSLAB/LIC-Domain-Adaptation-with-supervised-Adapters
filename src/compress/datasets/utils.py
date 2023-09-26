@@ -295,19 +295,23 @@ def  handle_dataset(args,device):
 
 
 
-        overall_transforms = transforms.Compose([ transforms.RandomCrop(args.patch_size), transforms.ToTensor()])
+        train_transforms = transforms.Compose([ transforms.RandomCrop(args.patch_size), transforms.ToTensor()])
+
+        valid_transforms = transforms.Compose([ transforms.CenterCrop(args.patch_size), transforms.ToTensor()])
+
+        test_transforms = transforms.Compose([  transforms.CenterCrop(size = args.patch_size) ,transforms.ToTensor()])
 
 
     
-        train_dataset = DomainNet(root = "/scratch/dataset/DomainNet", split="train", transform=overall_transforms, type = args.keyfold_dataset )
+        train_dataset = DomainNet(root = "/scratch/dataset/DomainNet", split="train", transform=train_transforms, type = args.keyfold_dataset )
         train_dataloader = DataLoader(train_dataset,batch_size=args.batch_size,num_workers=args.num_workers,shuffle=True, pin_memory=(device == "cuda"),)
 
 
-        valid_dataset = DomainNet(root = "/scratch/dataset/DomainNet", split="valid", transform=overall_transforms, type = args.keyfold_dataset)
+        valid_dataset = DomainNet(root = "/scratch/dataset/DomainNet", split="valid", transform=valid_transforms, type = args.keyfold_dataset)
         valid_dataloader = DataLoader(valid_dataset,batch_size=args.batch_size,num_workers=args.num_workers,shuffle=False,pin_memory=(device == "cuda"),)
 
 
-        test_transforms = transforms.Compose([  transforms.CenterCrop(size = args.patch_size) ,transforms.ToTensor()])
+        
 
         test_dataset =  DomainNet(root = "/scratch/dataset/DomainNet", split="test", transform= test_transforms, type = args.keyfold_dataset)
         test_dataloader = DataLoader(test_dataset, batch_size=1,num_workers=args.num_workers,shuffle=False,pin_memory=(device == "cuda"),)

@@ -17,7 +17,7 @@ import sys
 import wandb
 import torch
 import torch.optim as optim
-from compress.training import train_one_epoch, test_epoch,  compress_with_ac, RateDistortionLoss , AdapterLoss, DistorsionLoss,  RateLoss
+from compress.training import train_one_epoch, test_epoch,  compress_with_ac, RateDistortionLoss ,  DistorsionLoss
 from compress.datasets import   handle_dataset
 from compress.utils.annealings import *
 from compress.utils.help_function import CustomDataParallel, configure_optimizers,  create_savepath, save_checkpoint_our, sec_to_hours
@@ -31,7 +31,7 @@ from compress.models.utils import get_model
 
 
 def handle_trainable_pars(net, args):
-    if args.training_policy in ("adapter","mse","kd","rate"): 
+    if args.training_policy in ("mse","rate"): 
         net.freeze_net()
         net.pars_adapter(re_grad = True)
         net.pars_decoder(re_grad = args.unfreeze_decoder, st = args.level_dec_unfreeze)
@@ -44,17 +44,7 @@ def handle_trainable_pars(net, args):
     elif args.training_policy == "quantization":
         net.freeze_net()
         net.pars_adapter(re_grad = True) 
-        #net.unfreeze_quantizer()
-        #if args.model != "decoder":
-        #    net.pars_adapter(re_grad =False) 
-            #net.parse_hyperprior( re_grad_ha = args.unfreeze_ha, re_grad_hma = args.unfreeze_hma, re_grad_hsa = args.unfreeze_hsa)
 
-
-    elif args.training_policy == "quantization_lrp":
-        print("io sono qui dentro? dovrei esserlo per forza!")
-        net.freeze_net()
-        net.unfreeze_quantizer() 
-        net.unfreeze_lrp()
 
 
 def freeze_net(net):
@@ -75,38 +65,8 @@ def from_state_dict(cls, state_dict):
 
 
 
-def rename_key(key):
-    """Rename state_dict key.rrrrrhhhr"""
 
-    # Deal with modules trained wffffith DavvvtaParallel
-    if key.startswith("module."):
-        key = key[7:]
-    if key.startswith('h_s.'):
-        return None
 
-    # ResidualBlockWithStride: 'downsample' -> 'skip'ddddd
-    # if ".downsample." in key:
-    #     return key.replace("downsample", "skip")
-
-    # EntropyBottleneck: nn.ParameterList to nn.Parameters  ppppccc
-    if key.startswith("entropy_bottleneck."):
-        if key.startswith("entropy_bottleneck._biases."):
-            return f"entropy_bottleneck._bias{key[-1]}"
-
-        if key.startswith("entropy_bottleneck._matrices."):
-            return f"entropy_bottleneck._matrix{key[-1]}"
-
-        if key.startswith("entropy_bottleneck._factors."):
-            return f"entropy_bottleneck._factor{key[-1]}"
-
-    return key
-
-def load_pretrained(state_dict):
-    """Convert sccctaddte_dicteee keys."""
-    state_dict = {rename_key(k): v for k, v in state_dict.items()}
-    if None in state_dict:
-        state_dict.pop(None)
-    return state_dict
 
 
 def modify_dictionary(check):
@@ -181,37 +141,13 @@ def main(argv):
 
 
 
-
-    if args.training_policy == "quantization":
-        criterion = RateDistortionLoss(lmbda=args.lmbda)
-
-
-
-
-    elif args.training_policy == "mse":
+    if args.training_policy == "mse":
         print("entro qua che c'è mse distorsion loss")
         criterion =  DistorsionLoss()
-
-        #net.modify_adapter(args, device) 
-        net = net.to(device)
-    elif args.training_policy == "rate":
-        criterion = RateLoss()
-        net.modify_adapter(args, device) 
-        net = net.to(device)
-
-    elif args.training_policy == "adapter" or args.training_policy == "only_lrp": # in questo caso alleno solo l'adapter !!!!!!
-
-        criterion = AdapterLoss()
-
-        
-        # devo modificare il modello, al momento l'adapter non ha parametri allenabili 
-        #if args.dim_adapter != 0 and args.model == "latent":
-        net.modify_adapter(args, device) 
-        net = net.to(device)
-            
-    else:
-       
-
+        if args.model != "decoder":
+            net.modify_adapter(args, device) 
+        net = net.to(device)        
+    else:    
         criterion = RateDistortionLoss(lmbda=args.lmbda)
 
     last_epoch = 0
@@ -226,7 +162,7 @@ def main(argv):
     print("hola!")
     #lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", factor=0.5, patience=20)
     if args.scheduler == "plateau":
-        lr_scheduler =  optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", factor=0.3, patience=args.patience)
+        lr_scheduler =  optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", factor=0.5, patience=args.patience)
     elif args.scheduler == "multistep":
         print("Multistep scheduler")
         lr_scheduler =optim.lr_scheduler.MultiStepLR(optimizer, milestones=[100,200,250,350,500,550], gamma=0.5)
@@ -379,7 +315,7 @@ def main(argv):
 
 if __name__ == "__main__":
     #Enhanced-imagecompression-adapter
-    wandb.init(project="Enhanced-imagecompression-adapter-sketch-other", entity="albertopresta")   
+    wandb.init(project="Enhanced-imagecompression-adapter-sketch", entity="albertopresta")   
     main(sys.argv[1:])
 
 
