@@ -3,7 +3,7 @@ import argparse
 from compress.zoo import models
 def parse_args(argv):
     parser = argparse.ArgumentParser(description="Example training script.")
-    parser.add_argument("-m","--model",default="decoder",choices=models.keys(),help="Model architecture (default: %(default)s)",)
+    parser.add_argument("-m","--model",default="split",choices=models.keys(),help="Model architecture (default: %(default)s)",)
 
     parser.add_argument("-dt", "--dataset_type", type=str, default = "domain", choices = ["domain","openimages","PACS"], help="Training dataset")
 
@@ -83,14 +83,14 @@ def parse_args(argv):
     parser.add_argument("--depth", default=1, type = int)
 
     parser.add_argument("--type_adapter_attn_1",type = str, choices=["singular","transformer","attention","attention_singular","multiple"],default="singular",help = "typology of adapters")
-    parser.add_argument("--dim_adapter_attn_1",default = 360, type = int)
+    parser.add_argument("--dim_adapter_attn_1",default = 320, type = int)
     parser.add_argument("--stride_attn_1",default = 1, type = int)
     parser.add_argument("--kernel_size_attn_1", default = 3, type = int)
     parser.add_argument("--padding_attn_1", default = 1, type = int)
     parser.add_argument("--position_attn_1", default = "res_last", type = str)
 
     parser.add_argument("--type_adapter_attn_2",type = str, choices=["singular","transformer","attention","attention_singular","multiple"],default="singular",help = "typology of adapters")
-    parser.add_argument("--dim_adapter_attn_2", default =246, type = int)
+    parser.add_argument("--dim_adapter_attn_2", default =192, type = int)
     parser.add_argument("--stride_attn_2", default = 1, type = int)
     parser.add_argument("--kernel_size_attn_2", default = 3, type = int)
     parser.add_argument("--padding_attn_2", default = 1, type = int)

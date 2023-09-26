@@ -18,6 +18,7 @@ from .cnn import WACNN
 from .cnn_latent_adapter import WACNNStanh
 from .cnn_dec_adapter import WACNNDecoderAdapter
 from .cnn_attn_adapter import WACNNAttentionAdapter
+from .cnn_split_connection import WACNNSplitConnections
 #from .model_wrapper import QuantizedModelWrapper, WeightEntropyModule
 
 #from .stf_stanh import SymmetricalTransFormerStanh

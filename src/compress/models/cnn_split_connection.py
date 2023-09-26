@@ -3,17 +3,20 @@ import torch.nn as nn
 
 from compressai.models.utils import  update_registered_buffers
 from compressai.ans import BufferedRansEncoder, RansDecoder
-from compress.layers.layers import  Win_noShift_Attention_Adapter, deconv,   adapter_res, ResidualAdapterDeconv
-from compress.layers.gdn import GDN, GDN_Adapter
+from compress.layers.layers import  Win_noShift_Attention_Adapter, deconv,   ResidualAdapterDeconv
+from compress.layers.gdn import GDN
 import torch 
 from compressai.models import CompressionModel
 
 
-class WACNNDecoderAdapter(WACNN):
+
+
+class WACNNSplitConnections(WACNN):
     def __init__(
         self,
         N=192,
         M=320,
+        
         dim_adapter_attn_1: int = 0,
         stride_attn_1: int = 1,
         kernel_size_attn_1: int = 1,
@@ -27,20 +30,6 @@ class WACNNDecoderAdapter(WACNN):
         padding_attn_2: int = 0,
         position_attn_2: str = "res_last",
         type_adapter_attn_2: str = "singular",
-
-
-
-        dim_adapter_deconv_1: int = 0,
-        stride_deconv_1: int = 1,
-        kernel_size_deconv_1: int = 1,
-        padding_deconv_1: int = 0,
-        type_adapter_deconv_1: str = "singular",
-
-        dim_adapter_deconv_2: int = 1,
-        stride_deconv_2: int = 1,
-        kernel_size_deconv_2:int = 1,
-        padding_deconv_2: int = 0,
-        type_adapter_deconv_2: str = "singular",
 
 
 
@@ -81,35 +70,16 @@ class WACNNDecoderAdapter(WACNN):
                                           type_adapter = type_adapter_attn_2,
                                           mean = mean, 
                                           groups = groups),
-            deconv(N, N, kernel_size=5, stride=2),
-            adapter_res(N,
-                        dim_adapter = dim_adapter_deconv_1, 
-                        padding =padding_deconv_1, 
-                        stride= stride_deconv_1, 
-                        std = 0.0,
-                        mean = mean ,
-                        kernel_size =kernel_size_deconv_1,
-                        type_adapter = type_adapter_deconv_1,
-                        name = "deconv_adapt_2",
-                        res = True), 
-            GDN(N, inverse=True ), 
-            deconv(N, 3, kernel_size=5, stride=2),
-            adapter_res(3,
-                        dim_adapter = dim_adapter_deconv_2, 
-                        padding =padding_deconv_2, 
-                        stride= stride_deconv_2, 
-                        std = 0.0,
-                        mean = mean ,
-                        kernel_size =kernel_size_deconv_2,
-                        type_adapter = type_adapter_deconv_2,
-                        name = "deconv_adapt_2",
-                        res = True) 
-
-       )
-        
-
-
-
+            ResidualAdapterDeconv(N, N, kernel_size=5, stride=2), #modificare lo state dict
+            GDN(N, inverse=True),
+            ResidualAdapterDeconv(N, 3, kernel_size=5, stride=2), #modificare lo state dict
+        )
+    
+    #def state_dict(self):
+    #    orig = super().state_dict()
+    #    return {
+    #        k.replace('original_model_weights.',''): v for k, v in orig.items()
+    #    }
 
     def load_state_dict(self, state_dict, strict: bool = True):
         # Dynamically update the entropy bottleneck buffers related to the CDFs
@@ -133,7 +103,7 @@ class WACNNDecoderAdapter(WACNN):
     def pars_adapter(self, re_grad = False): 
         #for single_adapter in self.adapter_trasforms:
         for n,p in self.g_s.named_parameters(): 
-                if "adapter" in n:
+                if "adapter_transpose" in n:
                     print("sto sbloccando gli adapter: ",n)
                     p.requires_grad = re_grad 
             

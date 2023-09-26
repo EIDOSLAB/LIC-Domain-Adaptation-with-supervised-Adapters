@@ -16,7 +16,11 @@ def rename_key_for_adapter(key, stringa, nuova_stringa):
 
 
 
+def modify_state_dict(state_dict):
 
+    return {
+        k.replace('original_model_weights.',''): v for k, v in state_dict.items()
+    }
 
 
 
@@ -119,7 +123,7 @@ def get_model_for_evaluation(args,model_path,device):
 
 
 
-def get_model(args,device, N = 192, M = 320 ) -> nn.Module:
+def get_model(args,device, N = 192, M = 320 ):
 
     if args.model == "base":
         print("attn block base method siamo in baseline")
@@ -162,44 +166,22 @@ def get_model(args,device, N = 192, M = 320 ) -> nn.Module:
         if args.pret_checkpoint is not None:
 
             #state_dict = load_pretrained(torch.load(args.pret_checkpoint, map_location=device)['state_dict'])
-            #print("-------> ",state_dict.keys())
             state_dict = load_pretrained(torch.load(args.pret_checkpoint, map_location=device))
-            #print("faccio il check dei cumulative weights: ",net.gaussian_conditional.sos.cum_w)#jj
-            #print("prima di fare l'update abbiamo che: ",net.h_a[0].weight[0])
-            if "gaussian_conditional._quantized_cdf" in list(state_dict.keys()):
-                del state_dict["gaussian_conditional._offset"] 
-                del state_dict["gaussian_conditional._quantized_cdf"] 
-                del state_dict["gaussian_conditional._cdf_length"] 
-                del state_dict["gaussian_conditional.scale_table"] 
-            if "entropy_bottleneck._quantized_cdf" in list(state_dict.keys()):
-                del state_dict["entropy_bottleneck._offset"]
-                del state_dict["entropy_bottleneck._quantized_cdf"]
-                del state_dict["entropy_bottleneck._cdf_length"]
-            
+
         net.load_state_dict(state_dict)
         net.to(device)       
         net.update()
         #print("***************************** CONTROLLO INOLTRE I CUMULATIVE WEIGHTS  ", net.gaussian_conditional.sos.cum_w) # ffff  fff
   
         return net
-
     elif args.model in ("decoder"):
 
 
         checkpoint = torch.load(args.pret_checkpoint , map_location=device)#["state_dict"]
-
-            
         print("INIZIO STATE DICT")
         modello_base = from_state_dict(models["base"], checkpoint)
 
         #print("questa è la dimensione iniziale: ",checkpoint["g_a.4.conv_b.0.attn.relative_position_bias_table"].shape)
-
-
-
-
-        
-
-
 
         modello_base.update()
         modello_base.to(device) 
@@ -255,34 +237,70 @@ def get_model(args,device, N = 192, M = 320 ) -> nn.Module:
         net.to(device)
 
 
-        print("***************************************************************************************************")
-        print("****************************** MODELLO DA DOVE PRENDO ************************************www********")
-        print("***************************************************************************************************")
-
-        for k in list(state_dict.keys()):
-            if "g_s" in k:
-                print(k)
-        print("******************************************************************************************************")
-        print("******************************************************************************************************")
-        print("******************************************************************************************************")
-
- 
-        print("***************************************************************************************************")
-        print("****************************** MODELLO NUOVO ********************************************")
-        print("***************************************************************************************************")
-
-        for k in list(net.state_dict().keys()):
-            if "g_s" in k:
-                print(k)
-        print("******************************************************************************************************")
-        print("******************************************************************************************************")
-        print("******************************************************************************************************")
-        
 
 
         return net
 
+    elif args.model == "split":
 
+
+        checkpoint = torch.load(args.pret_checkpoint , map_location=device)#["state_dict"]
+        print("INIZIO STATE DICT")
+        modello_base = from_state_dict(models["base"], checkpoint)
+
+        #print("questa è la dimensione iniziale: ",checkpoint["g_a.4.conv_b.0.attn.relative_position_bias_table"].shape)
+
+        modello_base.update()
+        modello_base.to(device) 
+
+        net = models[args.model](N = modello_base.N,
+                                M =modello_base.M,
+
+                                dim_adapter_attn_1 = args.dim_adapter_attn_1,
+                                stride_attn_1 = args.stride_attn_1,
+                                kernel_size_attn_1 = args.kernel_size_attn_1,
+                                padding_attn_1 = args.padding_attn_1,
+                                type_adapter_attn_1 = args.type_adapter_attn_1,
+                                position_attn_1 = args.position_attn_1,
+
+                                dim_adapter_attn_2 = args.dim_adapter_attn_2, 
+                                stride_attn_2 = args.stride_attn_2,
+                                kernel_size_attn_2 = args.kernel_size_attn_2,
+                                padding_attn_2 = args.padding_attn_2,
+                                type_adapter_attn_2 = args.type_adapter_attn_2,
+                                position_attn_2 = args.position_attn_2,
+
+
+                                std = args.std,
+                                mean = args.mean,                              
+                                bias = args.bias,
+                              ) 
+        
+        #print("questo è il nuovo modello: ",net.state_dict()["g_a.4.conv_b.0.attn.relative_position_bias_table"].shape)
+
+        
+        state_dict = modello_base.state_dict()
+        #state_dict = {rename_key_for_adapter(k, stringa = "g_s.8.", nuova_stringa = "g_s.9." ): v for k, v in state_dict.items()}
+        #state_dict = {rename_key_for_adapter(k, stringa = "g_s.7.",nuova_stringa = "g_s.8."): v for k, v in state_dict.items()}
+        state_dict = modify_state_dict(state_dict)
+
+        print("******************************** NUOVO *********************")
+        for k in list(net.state_dict().keys()):
+            if "g_s" in k:
+                print(k)
+        print("********************************************")
+        print("******************************** VECCHIO *********************")
+        for k in list(state_dict):
+            if "g_s" in k:
+                print(k)
+        print("********************************************")
+
+
+
+        info = net.load_state_dict(state_dict, strict=False)
+        net.to(device)
+
+        return net      
 
     else:
         net = models[args.model](N = N )

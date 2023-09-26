@@ -144,8 +144,8 @@ def main(argv):
     if args.training_policy == "mse":
         print("entro qua che c'è mse distorsion loss")
         criterion =  DistorsionLoss()
-        if args.model != "decoder":
-            net.modify_adapter(args, device) 
+        #if args.model != "decoder":
+        #    net.modify_adapter(args, device) 
         net = net.to(device)        
     else:    
         criterion = RateDistortionLoss(lmbda=args.lmbda)

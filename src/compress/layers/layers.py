@@ -21,6 +21,7 @@ from compress.adaptation.adapter import Adapter
 #from .wacn_adapter import define_adapter, init_adapter_layer
 import torch.nn.functional as F
 from compressai.ops.parametrizers import NonNegativeParametrizer
+from collections import OrderedDict
 
 __all__ = [
     "conv3x3",
@@ -33,6 +34,57 @@ __all__ = [
     "SelfAttentionResidualBlock"
 
 ]
+
+
+
+class ResidualAdapterDeconv(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size=5, stride=2, mean = 0, standard_deviation = 0.00):
+        super().__init__()
+        self.original_model_weights = nn.ConvTranspose2d(
+            in_channels,
+            out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            output_padding=stride - 1,
+            padding=kernel_size // 2,
+        )
+        
+
+        params = OrderedDict([
+        ("adapter_transpose_conv1",nn.ConvTranspose2d(in_channels, 
+                                                     out_channels, 
+                                                     kernel_size = kernel_size, 
+                                                     stride = stride, 
+                                                     output_padding = stride -1, 
+                                                     padding = kernel_size // 2))
+                            ])
+                    
+                    
+        
+        
+
+        self.Adapterconv =  nn.Sequential(params)
+        self.mean = mean 
+        self.standard_deviation = standard_deviation
+        
+        
+        self.Adapterconv.apply(self.initialization)
+    
+
+    def initialization(self,m):
+        if isinstance(m, nn.Conv2d) or isinstance(m,nn.Linear) or isinstance(m, nn.ConvTranspose2d) :
+            print("sono entrato qua per inizializzare split connections")
+            nn.init.normal_(m.weight, mean=self.mean, std=self.standard_deviation)
+            if m.bias is not None:
+                torch.nn.init.zeros_(m.bias)       
+
+    
+    
+    
+    def forward(self, x):
+        x_adapt = self.Adapterconv(x) 
+        x_conv = self.original_model_weights(x)
+        return x_conv + x_adapt
 
 
 
