@@ -36,7 +36,7 @@ class AverageMeter:
         self.avg = self.sum / self.count
 
 
-def train_one_epoch(model, criterion, train_dataloader, optimizer, aux_optimizer, epoch, clip_max_norm ,counter, sos, not_adapters):
+def train_one_epoch(model, criterion, train_dataloader, optimizer, epoch, clip_max_norm ,counter):
     model.train()
     device = next(model.parameters()).device
 
@@ -63,17 +63,8 @@ def train_one_epoch(model, criterion, train_dataloader, optimizer, aux_optimizer
         #if aux_optimizer is not None:
         #    aux_optimizer.zero_grad()
 
-        if sos and not_adapters:
-            #out_net = model(d, training = True)
-            out_net = model(d)
 
-        elif sos is True and not_adapters is False:
-
-            out_net = model.forward_adapter(d) #, training = False)  # da cambiare assolutamente!!!!!!!!!
-        else:    
-            out_net = model(d)
-
-
+        out_net = model(d)
         out_criterion = criterion(out_net, d)
 
         out_criterion["loss"].backward()
@@ -129,32 +120,6 @@ def train_one_epoch(model, criterion, train_dataloader, optimizer, aux_optimizer
             y_bpp.update(out_criterion["y_bpp"].clone().detach())
             z_bpp.update(out_criterion["z_bpp"].clone().detach())    
 
-        if "adapter_loss" in list(out_criterion.keys()):
-
-            wand_dict = {
-                "train_batch": counter,
-                "train_batch/adapter_loss": out_criterion["adapter_loss"].clone().detach().item(),
-
-
-            }
-            wandb.log(wand_dict) 
-            adapter_loss.update( out_criterion["adapter_loss"].clone().detach().item()) 
-        
-        if "quantization_loss" in list(out_criterion.keys()):
-            wand_dict = {
-                "train_batch": counter,
-                "train_batch/quantization_error": out_criterion["quantization_loss"].clone().detach().item(),
-
-
-            }
-            wandb.log(wand_dict)   
-        # we have to augment beta here 
-        
-
-
-
- 
-
     log_dict = {
         "train":epoch,
         "train/loss": loss.avg,
@@ -164,29 +129,12 @@ def train_one_epoch(model, criterion, train_dataloader, optimizer, aux_optimizer
         }
         
     wandb.log(log_dict)
-
-
-
-    if "z_bpp" in list(out_criterion.keys()):
-        if sos:
-            wand_dict = {
-                "train":epoch,
-                "train/factorized_bpp": z_bpp.avg,
-                "train/gaussian_bpp": y_bpp.avg,
-
-            }
-            wandb.log(wand_dict)
-
-
-
-
-
     return counter
 
 
 
 
-def test_epoch(epoch, test_dataloader, model, criterion, sos, valid, not_adapters):
+def test_epoch(epoch, test_dataloader, model, criterion,  valid):
     model.eval()
     device = next(model.parameters()).device
 
@@ -198,28 +146,15 @@ def test_epoch(epoch, test_dataloader, model, criterion, sos, valid, not_adapter
     psnr = AverageMeter()
     ssim = AverageMeter()
 
-    residual_met = AverageMeter()
-    residual_bpp = AverageMeter()
+
     quantization_error = AverageMeter()
 
     adapter_error = AverageMeter()
     with torch.no_grad():
         for d in test_dataloader:
 
-
-
-
-
             d = d.to(device)
-            if sos and not_adapters:
-                out_net = model(d)
-            elif sos is True and not_adapters is False: 
-                out_net = model.forward_adapter(d)
-            else:
-                out_net = model(d)
-
-
-
+            out_net = model(d)
             out_criterion = criterion(out_net, d)
 
             bpp_loss.update(out_criterion["bpp_loss"])
@@ -231,19 +166,6 @@ def test_epoch(epoch, test_dataloader, model, criterion, sos, valid, not_adapter
 
             psnr.update(compute_psnr(d, out_net["x_hat"]))
             ssim.update(compute_msssim(d, out_net["x_hat"]))
-
-            if "res_met" in list(out_criterion.keys()):
-                residual_met.update(out_criterion["res_met"])
-                residual_bpp.update(out_criterion["bpp_res"])
-
-
-            if "quantization_loss" in list(out_criterion.keys()):
-                quantization_error.update(out_criterion["quantization_loss"])
-
-
-
-            if "adapter_loss" in list(out_criterion.keys()):
-                adapter_error.update(out_criterion["adapter_loss"])
 
 
     print(
@@ -300,7 +222,7 @@ def test_epoch(epoch, test_dataloader, model, criterion, sos, valid, not_adapter
 from compressai.ops import compute_padding
 
 
-def compress_with_ac(model,  filelist, device, epoch, loop = True, torcach = False, writing = None ):
+def compress_with_ac(model,  filelist, device, epoch, loop = True,  writing = None ):
     #model.update(None, device)
     print("ho finito l'update")
     bpp_loss = AverageMeter()
@@ -320,12 +242,9 @@ def compress_with_ac(model,  filelist, device, epoch, loop = True, torcach = Fal
             pad, unpad = compute_padding(h, w, min_div=2**6)  # pad to allow 6 strides of 2
             x_padded = F.pad(x, pad, mode="constant", value=0)
 
-            if torcach is False:
-                data =  model.compress(x_padded)
-                out_dec = model.decompress(data["strings"], data["shape"])
-            else:
-                data =  model.compress_torcach(x_padded)
-                out_dec = model.decompress_torcach(data)
+
+            data =  model.compress(x_padded)
+            out_dec = model.decompress(data["strings"], data["shape"])
 
             out_dec["x_hat"] = F.pad(out_dec["x_hat"], unpad)
 

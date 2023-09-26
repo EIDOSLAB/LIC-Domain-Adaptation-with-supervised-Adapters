@@ -13,25 +13,17 @@
 # limitations under the License.
 
 import numpy as np
-import random
 import sys
 import wandb
 import torch
 import torch.optim as optim
-from compress.training import train_one_epoch, test_epoch,  compress_with_ac, RateDistortionLoss , AdapterLoss, DistorsionLoss, KnowledgeDistillationLoss, RateLoss
-from torch.utils.data import DataLoader
-from torchvision import transforms
-import os 
-
-from compress.datasets import ImageFolder,  handle_dataset
-from compress.zoo import models
+from compress.training import train_one_epoch, test_epoch,  compress_with_ac, RateDistortionLoss , AdapterLoss, DistorsionLoss,  RateLoss
+from compress.datasets import   handle_dataset
 from compress.utils.annealings import *
-from compress.utils.help_function import CustomDataParallel, configure_optimizers, configure_latent_space_policy, create_savepath, save_checkpoint_our, sec_to_hours
+from compress.utils.help_function import CustomDataParallel, configure_optimizers,  create_savepath, save_checkpoint_our, sec_to_hours
 from compress.utils.parser import parse_args
-from torch.utils.data import Dataset
-from compress.utils.plotting import plot_sos
-from PIL import Image
-from compress.models.utils import get_model, introduce_teacher
+from compress.models.utils import get_model
+
 
 
 
@@ -151,7 +143,7 @@ def main(argv):
 
 
 
-
+    """
     if args.model == "base":
 
         factorized_configuration , gaussian_configuration = configure_latent_space_policy(args, device, baseline = True)
@@ -159,7 +151,7 @@ def main(argv):
         factorized_configuration , gaussian_configuration = configure_latent_space_policy(args, device, baseline = False)
     print("gaussian configuration----- -fdddguuggffxssssxxx------>: ",gaussian_configuration)
     print("factorized configuration------>ceeccccssààcccc->: ",factorized_configuration)
-
+    """
 
 
 
@@ -167,9 +159,9 @@ def main(argv):
 
     #lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", factor=0.3, patience=4)
 
-    net, baseline = get_model(args,device, factorized_configuration = factorized_configuration, gaussian_configuration = gaussian_configuration )
+    net = get_model(args,device)
     net = net.to(device)
-    sos = not baseline
+
 
 
 
@@ -184,7 +176,6 @@ def main(argv):
 
 
 
-    print("sos is the follwoing ",sos)
     if args.cuda and torch.cuda.device_count() > 1:
         net = CustomDataParallel(net)
 
@@ -194,30 +185,24 @@ def main(argv):
     if args.training_policy == "quantization":
         criterion = RateDistortionLoss(lmbda=args.lmbda)
 
-        not_adapters = True
+
 
 
     elif args.training_policy == "mse":
         print("entro qua che c'è mse distorsion loss")
         criterion =  DistorsionLoss()
-        if args.model == "latent":
-            not_adapters = False
-        else:
-            not_adapters = True
+
         #net.modify_adapter(args, device) 
         net = net.to(device)
     elif args.training_policy == "rate":
         criterion = RateLoss()
-
-        not_adapters = False
         net.modify_adapter(args, device) 
         net = net.to(device)
 
     elif args.training_policy == "adapter" or args.training_policy == "only_lrp": # in questo caso alleno solo l'adapter !!!!!!
 
         criterion = AdapterLoss()
-        print("se sono entrato qua va benissimmo!!!")
-        not_adapters = False
+
         
         # devo modificare il modello, al momento l'adapter non ha parametri allenabili 
         #if args.dim_adapter != 0 and args.model == "latent":
@@ -228,7 +213,7 @@ def main(argv):
        
 
         criterion = RateDistortionLoss(lmbda=args.lmbda)
-        not_adapters = True
+
     last_epoch = 0
 
 
@@ -237,7 +222,7 @@ def main(argv):
 
 
 
-    optimizer, aux_optimizer = configure_optimizers(net, args, baseline)
+    optimizer, aux_optimizer = configure_optimizers(net, args)
     print("hola!")
     #lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", factor=0.5, patience=20)
     if args.scheduler == "plateau":
@@ -290,7 +275,7 @@ def main(argv):
 
 
     for epoch in range(last_epoch, args.epochs):
-        print("**************** epoch: ",epoch,". Counter: ",counter," ",not_adapters," ",sos)
+        print("**************** epoch: ",epoch,". Counter: ",counter," ")
         previous_lr = optimizer.param_groups[0]['lr']
         print(f"Learning rate: {optimizer.param_groups[0]['lr']}","    ",previous_lr)
         print("epoch ",epoch)
@@ -311,11 +296,11 @@ def main(argv):
         
 
         if model_tr_parameters > 0:
-            counter = train_one_epoch(net, criterion, train_dataloader, optimizer, aux_optimizer,epoch, 1,counter,sos, not_adapters)
+            counter = train_one_epoch(net, criterion, train_dataloader, optimizer,epoch, 1,counter)
  
-        loss_valid = test_epoch(epoch, valid_dataloader, net, criterion, sos, valid = True,not_adapters=not_adapters)
+        loss_valid = test_epoch(epoch, valid_dataloader, net, criterion,  valid = True)
         
-        loss = test_epoch(epoch, test_dataloader, net, criterion, sos, valid = False, not_adapters=not_adapters)
+        loss = test_epoch(epoch, test_dataloader, net, criterion,  valid = False)
         lr_scheduler.step(loss_valid)
 
 
@@ -328,20 +313,17 @@ def main(argv):
             net.update()
             compress_with_ac(net,filelist, device, epoch_enc)
             epoch_enc += 1
-            #if baseline is False and sos: 
-            #    plot_sos(net, device)
-
-
+  
 
         if is_best:
             net.update()
 
 
 
-        if baseline: #and (is_best or epoch%25==0):
-            if  (is_best or epoch%5==0):
-                save_checkpoint_our(
-                    {
+
+        if (is_best or epoch%5==0):
+            save_checkpoint_our(
+                {
                     "epoch": epoch,
                     "state_dict": net.state_dict(),
                     "loss": loss,
@@ -353,51 +335,11 @@ def main(argv):
                 filename,
                 filename_best
                 )
-        else:
-
-            filename, filename_best =  create_savepath(args, epoch)
-
-            if (is_best) or epoch%25==0:
-                if sos:
-                    save_checkpoint_our(
-                            {
-                                "epoch": epoch,
-                                "state_dict": net.state_dict(),
-                                "loss": loss,
-                                "optimizer": optimizer.state_dict(),
-                                "lr_scheduler": lr_scheduler.state_dict(),
-                               # "factorized_configuration": net.factorized_configuration,
-                               # "gaussian_configuration":net.gaussian_configuration,
-                                #"entropy_bottleneck_w":net.entropy_bottleneck.sos.w,
-                                #"gaussian_conditional_w":net.gaussian_conditional.sos.w,
-                                "type_adapter":args.type_adapter,
-                                "bias":args.bias,
-                                "model":args.model,
-                                "N":args.dims_n,
-                                "M":args.dims_m
 
 
 
 
-                        },
-                        is_best,
-                        filename,
-                        filename_best    
-                    )   
-                else:
-                    save_checkpoint_our(
-                            {
-                                "epoch": epoch,
-                                "state_dict": net.state_dict(),
-                                "loss": loss,
-                                "optimizer": optimizer.state_dict(),
-                                "lr_scheduler": lr_scheduler.state_dict(),
 
-                        },
-                        is_best,
-                        filename,
-                        filename_best    
-                    )   
 
 
 

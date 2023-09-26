@@ -22,7 +22,6 @@ models = {
     "base": WACNN,
     "latent":WACNNStanh,
     "decoder": WACNNDecoderAdapter,
-    "rate":WACNNRateAdapter,
     "both":WACNNAttentionAdapter
 
 

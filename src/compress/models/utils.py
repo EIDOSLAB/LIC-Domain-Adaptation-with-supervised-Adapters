@@ -62,7 +62,7 @@ def from_state_dict(cls, state_dict):
 
 def get_model_for_evaluation(args,model_path,device):
     if args.model == "base":
-        baseline = True
+
         print("attn block base method siamo in baseline")
 
         checkpoint = torch.load(model_path, map_location=device)#["state_dict"]
@@ -88,8 +88,7 @@ def get_model_for_evaluation(args,model_path,device):
         net.to(device) 
 
 
-        return net, baseline
-
+        return net
     elif args.model == "latent":
         checkpoint = load_pretrained(torch.load(model_path, map_location=device))
         state_dict = checkpoint["state_dict"]
@@ -114,16 +113,15 @@ def get_model_for_evaluation(args,model_path,device):
         net.to(device)       
         net.update()
         #print("***************************** CONTROLLO INOLTRE I CUMULATIVE WEIGHTS  ", net.gaussian_conditional.sos.cum_w)   
-        baseline = False   
-        return net, baseline
+    
+        return net
 
 
 
 
-def get_model(args,device, N = 192, M = 320, factorized_configuration = None, gaussian_configuration = None  ) -> nn.Module:
+def get_model(args,device, N = 192, M = 320 ) -> nn.Module:
 
     if args.model == "base":
-        baseline = True
         print("attn block base method siamo in baseline")
         if args.pret_checkpoint is not None: 
 
@@ -155,11 +153,11 @@ def get_model(args,device, N = 192, M = 320, factorized_configuration = None, ga
 
 
 
-        return net, baseline
+        return net
 
     elif args.model in ("latent","rate"):
 
-        net = models[args.model](N = N, M = M, factorized_configuration = factorized_configuration, gaussian_configuration = gaussian_configuration) #, dim_adapter = args.dim_adapter)
+        net = models[args.model](N = N, M = M) #, dim_adapter = args.dim_adapter)
         
         if args.pret_checkpoint is not None:
 
@@ -182,12 +180,11 @@ def get_model(args,device, N = 192, M = 320, factorized_configuration = None, ga
         net.to(device)       
         net.update()
         #print("***************************** CONTROLLO INOLTRE I CUMULATIVE WEIGHTS  ", net.gaussian_conditional.sos.cum_w) # ffff  fff
-        baseline = False   
-        return net, baseline
+  
+        return net
 
     elif args.model in ("decoder"):
 
-        baseline = False
 
         checkpoint = torch.load(args.pret_checkpoint , map_location=device)#["state_dict"]
 
@@ -250,7 +247,7 @@ def get_model(args,device, N = 192, M = 320, factorized_configuration = None, ga
         """
 
 
-        return net, baseline
+        return net
 
 
 

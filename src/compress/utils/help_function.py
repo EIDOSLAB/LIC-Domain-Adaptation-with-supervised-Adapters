@@ -160,7 +160,7 @@ def load_pretrained_net_for_training( mod_load,  architecture,   ml):
 
 
 
-def configure_optimizers(net, args, baseline):
+def configure_optimizers(net, args, baseline = False):
     """Separate parameters for the main optimizer and the auxiliary optimizer.
     Return two optimizers"""
 
@@ -196,8 +196,6 @@ def configure_optimizers(net, args, baseline):
     if args.sgd == "adam":
         optimizer = optim.Adam((params_dict[n] for n in sorted(parameters)),lr=args.learning_rate,)
     else: 
-
-
         optimizer = optim.SGD((params_dict[n] for n in sorted(parameters)),lr=args.learning_rate,momentum= args.momentum, weight_decay= args.weight_decay)
 
     return optimizer, aux_optimizer

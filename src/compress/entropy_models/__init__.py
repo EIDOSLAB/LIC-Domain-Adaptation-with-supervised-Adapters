@@ -13,8 +13,7 @@
 # limitations under the License.
 
 from .entropy_models import EntropyBottleneck, EntropyModel, GaussianConditional
-from .adaptive_entropy_models import  AdaptedEntropyBottleneck
-from .adaptive_gaussian_conditional import AdaptedGaussianConditional
+
 
 __all__ = [
     "EntropyModel",

@@ -10,7 +10,7 @@ import torch.nn.functional as F
 
 from torch import Tensor
 
-from compressai._CXX import pmf_to_quantized_cdf as _pmf_to_quantized_cdf
+
 from compressai.ops import LowerBound
 from compressai import ans
 from compress.entropy_models.coder import _EntropyCoder, default_entropy_coder, pmf_to_quantized_cdf, _forward

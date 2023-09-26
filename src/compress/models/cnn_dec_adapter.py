@@ -7,7 +7,6 @@ from compress.layers.layers import  Win_noShift_Attention_Adapter, deconv,   ada
 from compress.layers.gdn import GDN, GDN_Adapter
 import torch 
 from compressai.models import CompressionModel
-from compress.entropy_models import   AdaptedGaussianConditional
 
 
 class WACNNDecoderAdapter(WACNN):
@@ -59,7 +58,7 @@ class WACNNDecoderAdapter(WACNN):
                                           type_adapter = type_adapter),
             deconv(N, N, kernel_size=5, stride=2),
             adapter_res(N,dim_adapter = 0, padding = 0, stride= 1, std =0.0 ,kernel_size =0, mean = 0 , name = "deconv_adapt_1", res = True), # per ora non li considero!!!
-            GDN_Adapter(N, inverse=True, dim_adapter = 0, padding = 0, stride= 1, std = 0.0,kernel_size =1, mean =0 , name = "GDN_adapt_1" ), # per ora non li considero!!!
+            GDN_Adapter(N, inverse=True, dim_adapter = 0, padding = 0, stride= 1, std = 0.0,kernel_size =1, mean = 0 , name = "GDN_adapt_1" ), # per ora non li considero!!!
             deconv(N, 3, kernel_size=5, stride=2),
             adapter_res(3,dim_adapter =0, padding =0, stride= 1, std = 0.0, mean = 0 ,kernel_size = 1, name = "deconv_adapt_2", res = True)  # per ora non li considero!!!
         )

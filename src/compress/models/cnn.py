@@ -12,9 +12,7 @@ from .base import CompressionModelBase
 from compressai.models.utils import update_registered_buffers
 
 
-from compress.entropy_models import  AdaptedEntropyBottleneck, AdaptedGaussianConditional
-#from compress.entropy_models.adaptive_gaussian_conditional import GaussianConditionalSoS
-#from compress.entropy_models.adaptive_entropy_models import EntropyBottleneckSoS
+
 import torch.nn.functional as F
 from compress.quantization.adapter  import Adapter
 # From Balle's tensorflow compression examples
