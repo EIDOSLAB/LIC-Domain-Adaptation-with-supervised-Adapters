@@ -205,7 +205,7 @@ def main(argv):
     print("*****************************************  DOPO AGGIUNTA ADAPTER ***********************************************************************")
     net.update() #444
     #print("the filelist for compressinf is .",filelist)
-    b = compress_with_ac(net, filelist, device, -1, loop=False)
+    #b = compress_with_ac(net, filelist, device, -1, loop=False)
     print("****************************************************************************************************************")
     print("****************************************************************************************************************")
 

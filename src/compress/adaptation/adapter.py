@@ -162,7 +162,6 @@ class Adapter(nn.Module):
                     model.apply(self.initialization)
                     return model 
                 else:
-                    print("entro qua a ridefinire l'adapter, semplice covoluzione senza nulla!")
                     model = nn.Conv2d(self.in_ch, self.out_ch, kernel_size=self.kernel_size, stride=self.stride, bias=self.bias, groups=self.groups)
                     model.apply(self.initialization)
                     return model #nn.Conv2d(self.in_ch, self.out_ch, kernel_size=self.kernel_size, stride=self.stride, bias=self.bias, groups=self.groups)
@@ -187,9 +186,7 @@ class Adapter(nn.Module):
                     model.apply(self.initialization)
                     return model
                 else:
-                    print("entro qua che è il punto in cui faccio come wacv")
-
-
+                    print("entro qua che è il punto in cui faccio come wacv!!!!!")
                     params = OrderedDict([
                     (self.name + "_adapter_conv1",nn.Conv2d(self.in_ch,self.dim_adapter,kernel_size=self.kernel_size,bias=self.bias,stride=self.stride,groups=self.groups,padding = self.padding)),
                   #  ('GeLU0_adapter',nn.GELU()),
@@ -238,7 +235,7 @@ class Adapter(nn.Module):
  
             encoder_params = OrderedDict([ ("adapter_multiple_encoder_conv0",conv3x3(self.in_ch, self.in_ch)),
                                           ("adapter_multiple_encoder_gelu0",nn.GELU()),
-                                           ("adapter_multuple_encoder_conv1",conv3x3(self.in_ch, self.in_ch//2, stride=2),)
+                                           ("adapter_multiple_encoder_conv1",conv3x3(self.in_ch, self.in_ch//2)),
                                             ("adapter_multiple_encoder_gelu1",nn.GELU()),
                                             ("adapter_multuple_encoder_conv2",conv3x3(self.in_ch//2, self.in_ch//2, stride=2))
                                           ])
@@ -249,7 +246,7 @@ class Adapter(nn.Module):
             encoder.apply(self.initialization)        
             decoder_params = OrderedDict([ ("adapter_multiple_decoder_conv0",subpel_conv3x3(self.in_ch//2, self.in_ch//2,2)),
                                           ("adapter_multiple_encoder_gelu0",nn.GELU()),
-                                           ("adapter_multuple_encoder_conv1",subpel_conv3x3(self.in_ch//2, self.in_ch,2 ))
+                                           ("adapter_multuple_encoder_conv1",subpel_conv3x3(self.in_ch//2, self.in_ch,2 )),
                                             ("adapter_multiple_encoder_gelu1",nn.GELU()),
                                             ("adapter_multuple_encoder_conv2",conv3x3(self.in_ch, self.in_ch, stride=2))
                                           ])
