@@ -8,9 +8,8 @@ from .cnn import WACNN
 
 #from compress.entropy_models.adaptive_gaussian_conditional import GaussianConditionalSoS
 #from compress.entropy_models.adaptive_entropy_models import EntropyBottleneckSoS
-import torch.nn.functional as F
-from compress.quantization.adapter  import Adapter
-import copy
+
+from compress.adaptation.adapter  import Adapter
 # From Balle's tensorflow compression examples
 SCALES_MIN = 0.11
 SCALES_MAX = 256

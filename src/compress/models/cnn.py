@@ -8,13 +8,13 @@ from compress.layers import GDN
 
 from compress.ops import ste_round
 from compress.layers import conv3x3, subpel_conv3x3, Win_noShift_Attention, conv, deconv
-from .base import CompressionModelBase
+
 from compressai.models.utils import update_registered_buffers
 
 
 
 import torch.nn.functional as F
-from compress.quantization.adapter  import Adapter
+from compress.adaptation.adapter  import Adapter
 # From Balle's tensorflow compression examples
 SCALES_MIN = 0.11
 SCALES_MAX = 256

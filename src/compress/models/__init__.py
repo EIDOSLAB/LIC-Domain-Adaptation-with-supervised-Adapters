@@ -16,7 +16,6 @@
 
 from .cnn import WACNN 
 from .cnn_latent_adapter import WACNNStanh
-from .cnn_rate_adapter import WACNNRateAdapter
 from .cnn_dec_adapter import WACNNDecoderAdapter
 from .cnn_attn_adapter import WACNNAttentionAdapter
 #from .model_wrapper import QuantizedModelWrapper, WeightEntropyModule

@@ -26,15 +26,16 @@ class WACNNDecoderAdapter(WACNN):
         std: float = 0.00,
         mean: float = 0.00,
         groups: int = 1,
-        position: str = "last",
-        type_adapter: str = "singular",
+        position: str = "res_last",
+        type_adapter_1: str = "singular",
+        type_adapter_2: str = "singular",
         **kwargs
     ):
         super().__init__(N, M, **kwargs)
 
         
         self.g_s = nn.Sequential(
-            Win_noShift_Attention_Adapter( dim=M, num_heads=8,window_size=4,shift_size=2,
+            Win_noShift_Attention_Adapter( dim=M, num_heads=8,window_size=4,shift_size=2, # for the attention (no change)
                                           dim_adapter=dim_adapter_1,
                                           kernel_size = kernel_size_1,
                                           stride = stride_1,
@@ -42,7 +43,9 @@ class WACNNDecoderAdapter(WACNN):
                                           padding = padding_1,
                                           std = std, 
                                           position = position,
-                                          type_adapter = type_adapter),
+                                          type_adapter = type_adapter_1,
+                                          mean = mean, 
+                                          groups = groups),
             deconv(M, N, kernel_size=5, stride=2),
             GDN(N, inverse=True),
             deconv(N, N, kernel_size=5, stride=2),
@@ -55,7 +58,9 @@ class WACNNDecoderAdapter(WACNN):
                                           bias = bias,
                                           std = std,
                                           position = position,
-                                          type_adapter = type_adapter),
+                                          type_adapter = type_adapter_2,
+                                            mean = mean, 
+                                          groups = groups),
             deconv(N, N, kernel_size=5, stride=2),
             adapter_res(N,dim_adapter = 0, padding = 0, stride= 1, std =0.0 ,kernel_size =0, mean = 0 , name = "deconv_adapt_1", res = True), # per ora non li considero!!!
             GDN_Adapter(N, inverse=True, dim_adapter = 0, padding = 0, stride= 1, std = 0.0,kernel_size =1, mean = 0 , name = "GDN_adapt_1" ), # per ora non li considero!!!

@@ -15,7 +15,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from compress.quantization.adapter import Adapter
+from compress.adaptation.adapter import Adapter
 from torch import Tensor
 
 from compress.ops.parametrizers import NonNegativeParametrizer

@@ -218,7 +218,8 @@ def get_model(args,device, N = 192, M = 320 ) -> nn.Module:
                                 std = args.std,
                                 mean = args.mean,
                                 position = args.position,
-                                type_adapter = args.type_adapter
+                                type_adapter_1 = args.type_adapter_1,
+                                type_adapter_2 = args.type_adapter_2
                               ) 
         
         #print("questo è il nuovo modello: ",net.state_dict()["g_a.4.conv_b.0.attn.relative_position_bias_table"].shape)

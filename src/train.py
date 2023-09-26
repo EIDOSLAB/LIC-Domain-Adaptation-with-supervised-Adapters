@@ -315,21 +315,20 @@ def main(argv):
             epoch_enc += 1
   
 
-        if is_best:
-            net.update()
 
 
 
 
         if (is_best or epoch%5==0):
+            net.update()
             save_checkpoint_our(
                 {
                     "epoch": epoch,
                     "state_dict": net.state_dict(),
                     "loss": loss,
                     "optimizer": optimizer.state_dict(),
-                    "aux_optimizer": aux_optimizer.state_dict(),
                     "lr_scheduler": lr_scheduler.state_dict(),
+                    "args":args
                 },
                 is_best,
                 filename,

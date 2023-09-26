@@ -44,15 +44,6 @@ def parse_args(argv):
 
 
 
-    parser.add_argument("--fact_extrema",default=30,type=int,help="factorized_extrema",)
-    parser.add_argument('--fact_tr', '-ft', action='store_true', help='factorized trainable')
-    parser.add_argument('--entropy_bot', '-eb', action='store_true', help='entropy bottleneck trainable')
-
-
-
-
-    parser.add_argument("--gauss_extrema",default=200,type=int,help="gauss_extrema",)
-    parser.add_argument('--gauss_tr', '-gt', action='store_true', help='gaussian trainable')
 
 
 
@@ -60,20 +51,19 @@ def parse_args(argv):
 
 
 
-    parser.add_argument( "--alpha", default=0.95, type=float, help="target mean squared error",)
 
     parser.add_argument( "--momentum", default=0.0, type=float, help="momnetum for the optimizer",)
     parser.add_argument( "--weight_decay", default=0.0, type=float, help="weigth dacay for the optimizer (L2)",)
 
-    parser.add_argument( "--starting_epoch", default=-1, type=int, help="first epoch for training (see difference)",)
+
 
     parser.add_argument( "--num_images_train", default=16024, type=int, help="images for training",)
     parser.add_argument( "--num_images_val", default=1024, type=int, help="images for validation",)  
 
 
     #parser.add_argument("--pret_checkpoint",default = "/scratch/KD/devil2022/derivation/adam/00670-q6-devil2022-adam.pth.tar") #ssssssssssszzz
-    parser.add_argument("--pret_checkpoint",default = "/scratch/universal-dic/weights/q2/model.pth") 
-    parser.add_argument("--pret_checkpoint_base",default = "/scratch/universal-dic/weights/q2/model.pth")
+    parser.add_argument("--pret_checkpoint",default = "/scratch/universal-dic/weights/q6/model.pth") 
+    parser.add_argument("--pret_checkpoint_base",default = "/scratch/universal-dic/weights/q6/model.pth")
 
 
     parser.add_argument('--unfreeze_hsa_loop',  action='store_true', help='unfreeze hyperprior analysis')
@@ -81,14 +71,13 @@ def parse_args(argv):
     parser.add_argument('--unfreeze_hsa',  action='store_true', help='unfreeze hyperprior scale')
 
     parser.add_argument("--scheduler","-sch", type = str, default ="plateau")
-    parser.add_argument("--patience",default=20,type=int,help="patience",)
+    parser.add_argument("--patience",default=25,type=int,help="patience",)
 
-    parser.add_argument("--trainable_lrp","-tlrp",action='store_true',)
 
-    parser.add_argument('--training_policy', '-tp',type = str, default = "mse", choices= ["entire_qe","quantization_lrp","residual","kd","entire", "quantization", "adapter","mse","controlled","rate"] , help='adapter loss')
+    parser.add_argument('--training_policy', '-tp',type = str, default = "mse", choices= ["entire", "quantization", "adapter","mse","rate"] , help='adapter loss')
 
     
-    parser.add_argument("--type_adapter",type = str, choices=["singular","transformer","attention","selfattention"],default="singular",help = "typology of adapters")
+
     parser.add_argument( "--mean", default=0.0, type=float, help="initialization mean",)
     parser.add_argument( "--std", default=0.01, type=float, help="initialization std",)
     parser.add_argument("--bias","-bs",action='store_true',)
@@ -98,6 +87,9 @@ def parse_args(argv):
 
 
     parser.add_argument("--depth", default=1, type = int)
+
+    parser.add_argument("--type_adapter_1",type = str, choices=["singular","transformer","attention","selfattention"],default="singular",help = "typology of adapters")
+    parser.add_argument("--type_adapter_2",type = str, choices=["singular","transformer","attention","selfattention"],default="singular",help = "typology of adapters")
     parser.add_argument("--dim_adapter_1",default = 320, type = int)
     parser.add_argument("--dim_adapter_2", default =192, type = int)
     parser.add_argument("--stride_1",default = 1, type = int)

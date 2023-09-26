@@ -178,7 +178,7 @@ class Adapter(nn.Module):
 
                     params = OrderedDict([
                     (self.name + "_adapter_conv1",nn.Conv2d(self.in_ch,self.dim_adapter,kernel_size=self.kernel_size,bias=self.bias,stride=self.stride,groups=self.groups,padding = self.padding)),
-                    ('ReLU0',nn.GELU()),
+                  #  ('GeLU0_adapter',nn.GELU()),
                     (self.name + "_adapter_conv2",nn.Conv2d(self.dim_adapter, self.out_ch, kernel_size=self.kernel_size, bias=self.bias,stride=self.stride, groups=self.groups, padding = self.padding))])
                     
                     
@@ -194,6 +194,18 @@ class Adapter(nn.Module):
         elif self.type_adapter == "transformer":
             model = Transformer(dim = self.in_ch, depth = self.depth)
             return model
+
+        elif self.type_adapter == "attention_singular":
+
+                    params = OrderedDict([
+                    (self.name + "_adapter_attention", Attention(dim = self.in_ch))
+                    (self.name + "_adapter_conv1",nn.Conv2d(self.in_ch,self.dim_adapter,kernel_size=self.kernel_size,bias=self.bias,stride=self.stride,groups=self.groups,padding = self.padding)),
+                #    ('GeLU0_adapter',nn.GELU()),
+                    (self.name + "_adapter_conv2",nn.Conv2d(self.dim_adapter, self.out_ch, kernel_size=self.kernel_size, bias=self.bias,stride=self.stride, groups=self.groups, padding = self.padding))])
+                    
+                    
+                    model =  nn.Sequential(params)
+                    model.apply(self.initialization)
 
         elif self.type_adapter == "multiple":
             pass
@@ -215,11 +227,13 @@ class Adapter(nn.Module):
                 return out
             else: 
                 return x + out
-        else: # transformer
+        elif self.type_adapter == "transformer":
             x, inv = reshape_tensor(x) 
             out = self.AdapterModule(x)
             out,_ = reshape_tensor(out,inv = inv)
             return out
+        else: 
+            raise ValueError("Per ora non ho implementato altro!!")
 
 
             

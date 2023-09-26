@@ -33,7 +33,7 @@ class FeedForward(nn.Module):
         return self.net(x)
 
 class Attention(nn.Module):
-    def __init__(self, dim, heads = 2, dim_head = 64, dropout = 0.):
+    def __init__(self, dim, heads = 8, dim_head = 64, dropout = 0.):
         super().__init__()
         inner_dim = dim_head *  heads
         project_out = not (heads == 1 and dim_head == dim)

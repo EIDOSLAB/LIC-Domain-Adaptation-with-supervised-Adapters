@@ -270,15 +270,9 @@ def compress_with_ac(model,  filelist, device, epoch, loop = True,  writing = No
             
             size = out_dec['x_hat'].size()
             num_pixels = size[0] * size[2] * size[3]
-            if torcach is False:
-                bpp = sum(len(s[0]) for s in data["strings"]) * 8.0 / num_pixels#sum(len(s[0]) for s in data["strings"]) * 8.0 / num_pixels
-                bpp_1 = bpp 
-                bpp_2 = bpp
-            else: 
-                bpp_1 = (len(data["strings"][0]) * 8.0 ) / num_pixels
-                #print("la lunghezza è: ",len(out_enc[1]))
-                bpp_2 =  sum( (len(data["strings"][1][i]) * 8.0 ) / num_pixels for i in range(len(data["strings"][1])))
-                bpp = bpp_1 + bpp_2               
+            bpp = sum(len(s[0]) for s in data["strings"]) * 8.0 / num_pixels#sum(len(s[0]) for s in data["strings"]) * 8.0 / num_pixels
+
+            
             bpp_loss.update(bpp)
 
             if writing is not None:
@@ -287,7 +281,7 @@ def compress_with_ac(model,  filelist, device, epoch, loop = True,  writing = No
                 f.write("SEQUENCE "  +   nome_immagine + " BITS " +  str(bpp) + " PSNR " +  str(psnr_im)  + " MSSIM " +  str(ms_ssim_im) + "\n")
                 f.close()  
                 
-            print("image: ",d,": ",bpp_1," ",bpp_2," ",compute_psnr(x, out_dec["x_hat"]))
+            print("image: ",d,": ",bpp," ",compute_psnr(x, out_dec["x_hat"]))
 
 
 

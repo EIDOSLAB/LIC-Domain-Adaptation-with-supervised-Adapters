@@ -17,7 +17,7 @@ from torch import Tensor
 import torch
 import torch.nn as nn
 from .win_attention import WinBasedAttention, WinBaseAttentionAdapter
-from compress.quantization.adapter import Adapter
+from compress.adaptation.adapter import Adapter
 #from .wacn_adapter import define_adapter, init_adapter_layer
 import torch.nn.functional as F
 from compressai.ops.parametrizers import NonNegativeParametrizer
@@ -209,7 +209,7 @@ class Win_noShift_Attention_Adapter(Win_noShift_Attention):
         shift_size=0,
         dim_adapter: int = 1,
         groups: int = 1,
-        position: str = "last",
+        position: str = "res_last",
         stride: int = 1,
 
         kernel_size: int = 1,
