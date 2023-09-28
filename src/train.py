@@ -12,15 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
+
 import sys
 import wandb
 import torch
 import torch.optim as optim
 from compress.training import train_one_epoch, test_epoch,  compress_with_ac, RateDistortionLoss ,  DistorsionLoss
 from compress.datasets import   handle_dataset
-from compress.utils.annealings import *
-from compress.utils.help_function import CustomDataParallel, configure_optimizers,  create_savepath, save_checkpoint_our, sec_to_hours
+from compress.utils.help_function import CustomDataParallel, configure_optimizers,  create_savepath, save_checkpoint_our, sec_to_hours, set_seed
 from compress.utils.parser import parse_args
 from compress.models.utils import get_model
 
@@ -32,9 +31,10 @@ from compress.models.utils import get_model
 
 def handle_trainable_pars(net, args):
     if args.training_policy in ("mse","rate"): 
+        print("entro qua per sbloccare gli adapter")
         net.freeze_net()
         net.pars_adapter(re_grad = True)
-        net.pars_decoder(re_grad = args.unfreeze_decoder, st = args.level_dec_unfreeze)
+        #net.pars_decoder(re_grad = args.unfreeze_decoder, st = args.level_dec_unfreeze)
         #net.parse_hyperprior(  unfreeze_hsa_loop= args.unfreeze_hsa_loop, unfreeze_hsa = args.unfreeze_hsa)
         # aggiungo l'adapter e lo sfreezo!
         #  
@@ -47,18 +47,6 @@ def handle_trainable_pars(net, args):
 
 
 
-def freeze_net(net):
-    for n,p in net.named_parameters():
-        p.requires_grad = False
-        
-    for p in net.parameters(): 
-        p.requires_grad = False
-
-def from_state_dict(cls, state_dict):
-
-    net = cls()#cls(192, 320)
-    net.load_state_dict(state_dict)
-    return net
 
 
 
@@ -66,24 +54,6 @@ def from_state_dict(cls, state_dict):
 
 
 
-
-
-
-def modify_dictionary(check):
-    res = {}
-    ks = list(check.keys())
-    for key in ks: 
-        res[key[7:]] = check[key]
-    return res
-
-
-
-def set_seed(seed=123):
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    np.random.seed(seed)
 
 import time
 def main(argv):
@@ -216,6 +186,15 @@ def main(argv):
         print(f"Learning rate: {optimizer.param_groups[0]['lr']}","    ",previous_lr)
         print("epoch ",epoch)
 
+        print("##########################################################################################")
+        print("vedo se i parametri che devono essere bloccati lo sono")
+        for nn,tt in net.named_parameters():
+            if "original" in nn:
+                print(tt.requires_grad)
+
+
+
+
 
 
 
@@ -314,7 +293,7 @@ def main(argv):
         
 
 if __name__ == "__main__":
-    #Enhanced-imagecompression-adapter
+    #Enhanced-imagecompression-adapter-sketch
     wandb.init(project="Enhanced-imagecompression-adapter-sketch", entity="albertopresta")   
     main(sys.argv[1:])
 

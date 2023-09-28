@@ -83,14 +83,14 @@ def parse_args(argv):
     parser.add_argument("--depth", default=1, type = int)
 
     parser.add_argument("--type_adapter_attn_1",type = str, choices=["singular","transformer","attention","attention_singular","multiple"],default="singular",help = "typology of adapters")
-    parser.add_argument("--dim_adapter_attn_1",default = 320, type = int)
+    parser.add_argument("--dim_adapter_attn_1",default = 0, type = int)
     parser.add_argument("--stride_attn_1",default = 1, type = int)
-    parser.add_argument("--kernel_size_attn_1", default = 3, type = int)
-    parser.add_argument("--padding_attn_1", default = 1, type = int)
+    parser.add_argument("--kernel_size_attn_1", default = 1, type = int)
+    parser.add_argument("--padding_attn_1", default = 0, type = int)
     parser.add_argument("--position_attn_1", default = "res_last", type = str)
 
-    parser.add_argument("--type_adapter_attn_2",type = str, choices=["singular","transformer","attention","attention_singular","multiple"],default="singular",help = "typology of adapters")
-    parser.add_argument("--dim_adapter_attn_2", default =192, type = int)
+    parser.add_argument("--type_adapter_attn_2",type = str, choices=["singular","transformer","attention","attention_singular","multiple","transformer_singular"],default="singular",help = "typology of adapters")
+    parser.add_argument("--dim_adapter_attn_2", default =96, type = int)
     parser.add_argument("--stride_attn_2", default = 1, type = int)
     parser.add_argument("--kernel_size_attn_2", default = 3, type = int)
     parser.add_argument("--padding_attn_2", default = 1, type = int)
@@ -125,6 +125,9 @@ def parse_args(argv):
 def parse_args_evaluation(argv):
     parser = argparse.ArgumentParser(description="Example training script.")
 
+
+    
+
     parser.add_argument("-m","--model",default="both",help="Model architecture (default: %(default)s)",)
     parser.add_argument("-tq","--targ_q",default="q6",help="quality level to check",)
     parser.add_argument("-pm","--path_models",default="/scratch/KD/devil2022/derivation/adam",help="Model architecture (default: %(default)s)",)
@@ -136,6 +139,7 @@ def parse_args_evaluation(argv):
 
     parser.add_argument("-td","--test_dataset", default = "kodak", type = str)
 
+    parser.add_argument("-e","--epochs",default=800,type=int,help="Number of epochs (default: %(default)s)",)
 
     parser.add_argument("-rp","--result_path",default="/scratch/inference/results",help="Model architecture (default: %(default)s)",)
     parser.add_argument("-ip","--image_path",default="/scratch/dataset/kodak",help="Model architecture (default: %(default)s)",)
@@ -143,6 +147,56 @@ def parse_args_evaluation(argv):
     parser.add_argument("--cuda", action="store_true", help="Use cuda")
     parser.add_argument("--seed", type=float,default = 42, help="Set random seed for reproducibility")
 
+
+    args = parser.parse_args(argv)
+    return args
+
+
+def parse_args_gate(argv):
+    parser = argparse.ArgumentParser(description="Example training script.")
+
+
+    parser.add_argument("-e","--epochs",default=800,type=int,help="Number of epochs (default: %(default)s)",)
+
+    parser.add_argument("--num_adapter", default = 3, type = int)
+    parser.add_argument("--seed", type=float,default = 42, help="Set random seed for reproducibility")
+    parser.add_argument("--root", type=str,default = "/scratch/dataset/DomainNet/splitting/mixed", help="base root for dataset")
+    parser.add_argument("--train_datasets", nargs='+', type = str, default = ["train.txt"])
+    parser.add_argument("--valid_datasets", nargs='+', type = str, default = ["valid_clipart.txt","valid_sketch.txt","valid_openimages.txt"])
+    parser.add_argument("--test_datasets", nargs='+', type = str, default = ["test_clipart.txt","test_sketch.txt","test_kodak.txt","test_clic.txt"])
+    parser.add_argument("--lmbda",type=float,default=0.0483,help="Bit-rate distortion parameter (default: %(default)s)",)
+    parser.add_argument("--batch-size", type=int, default=16, help="Batch size (default: %(default)s)") 
+
+    parser.add_argument("--N",default=192,type=int,help="Number of epochs (default: %(default)s)",) 
+    parser.add_argument("--M",default=320,type=int,help="Number of epochs (default: %(default)s)",) 
+    parser.add_argument("--pret_checkpoint",default = "/scratch/universal-dic/weights/q6/model.pth")
+    parser.add_argument("--patience",default=20,type=int,help="patience",)
+    parser.add_argument("--patch-size",type=int,nargs=2,default=(256, 256),help="Size of the patches to be cropped (default: %(default)s)",)
+    parser.add_argument("--starting_epoch",default=-1,type=int,help="starting_epoch",)
+
+    parser.add_argument( "--mean", default=0.0, type=float, help="initialization mean",)
+    parser.add_argument( "--std", default=0.01, type=float, help="initialization std",)
+    parser.add_argument("--bias","-bs",action='store_true',)
+
+
+    parser.add_argument("--cuda", action="store_true", help="Use cuda")
+
+    parser.add_argument("--type_adapter_attn",type = str, choices=["singular","transformer","attention","attention_singular","multiple"],default="singular",help = "typology of adapters")
+    parser.add_argument("--dim_adapter_attn",default = 0, type = int)
+    parser.add_argument("--stride_attn",default = 1, type = int)
+    parser.add_argument("--kernel_size_attn", default = 1, type = int)
+    parser.add_argument("--padding_attn", default = 0, type = int)
+    parser.add_argument("--position_attn", default = "res_last", type = str)
+
+    parser.add_argument("--aggregation", default = "top1", type = str)
+
+    parser.add_argument("-lr","--learning-rate",default=1e-4,type=float,help="Learning rate (default: %(default)s)",)
+    parser.add_argument('--sgd', type = str,default = "adam", help='use sgd as optimizer')
+
+
+    parser.add_argument("--suffix",default=".pth.tar",type=str,help="factorized_annealing",)
+
+    parser.add_argument('--training_policy', '-tp',type = str, default = "gate", help='adapter loss')
 
     args = parser.parse_args(argv)
     return args

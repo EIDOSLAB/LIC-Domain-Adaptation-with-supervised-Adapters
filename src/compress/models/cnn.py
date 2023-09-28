@@ -7,8 +7,8 @@ from compress.entropy_models import EntropyBottleneck, GaussianConditional
 from compress.layers import GDN
 
 from compress.ops import ste_round
-from compress.layers import conv3x3, subpel_conv3x3, Win_noShift_Attention, conv, deconv
-
+from compress.layers import  Win_noShift_Attention
+from compress.layers.utils_function import conv, deconv, conv3x3, subpel_conv3x3
 from compressai.models.utils import update_registered_buffers
 
 

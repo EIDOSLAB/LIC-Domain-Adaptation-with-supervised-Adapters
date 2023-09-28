@@ -22,14 +22,10 @@ from compress.adaptation.adapter import Adapter
 import torch.nn.functional as F
 from compressai.ops.parametrizers import NonNegativeParametrizer
 from collections import OrderedDict
+from .utils_function import  conv1x1, conv3x3
 
 __all__ = [
-    "conv3x3",
-    "subpel_conv3x3",
-    "conv1x1",
     "Win_noShift_Attention",
-    "deconv",
-    "conv",
     "AttentionBlock",
     "SelfAttentionResidualBlock"
 
@@ -38,7 +34,7 @@ __all__ = [
 
 
 class ResidualAdapterDeconv(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=5, stride=2, mean = 0, standard_deviation = 0.00):
+    def __init__(self, in_channels, out_channels, kernel_size=5, stride=2, mean = 0, standard_deviation = 0.00, initialize = "gaussian"):
         super().__init__()
         self.original_model_weights = nn.ConvTranspose2d(
             in_channels,
@@ -50,14 +46,7 @@ class ResidualAdapterDeconv(nn.Module):
         )
         
 
-        params = OrderedDict([
-        ("adapter_transpose_conv1",nn.ConvTranspose2d(in_channels, 
-                                                     out_channels, 
-                                                     kernel_size = kernel_size, 
-                                                     stride = stride, 
-                                                     output_padding = stride -1, 
-                                                     padding = kernel_size // 2))
-                            ])
+        params = OrderedDict([("adapter_transpose_conv1",nn.ConvTranspose2d(in_channels, out_channels,  kernel_size = kernel_size, stride = stride, output_padding = stride -1, padding = kernel_size // 2))])
                     
                     
         
@@ -67,19 +56,16 @@ class ResidualAdapterDeconv(nn.Module):
         self.mean = mean 
         self.standard_deviation = standard_deviation
         
-        
-        self.Adapterconv.apply(self.initialization)
+        if initialize == "gaussian":
+            self.Adapterconv.apply(self.initialization)
     
 
     def initialization(self,m):
         if isinstance(m, nn.Conv2d) or isinstance(m,nn.Linear) or isinstance(m, nn.ConvTranspose2d) :
-            print("sono entrato qua per inizializzare split connections")
+            print("sono entrato qua per inizialissssszzare split connections E SONO QUA DENTRO CON 0")
             nn.init.normal_(m.weight, mean=self.mean, std=self.standard_deviation)
             if m.bias is not None:
                 torch.nn.init.zeros_(m.bias)       
-
-    
-    
     
     def forward(self, x):
         x_adapt = self.Adapterconv(x) 
@@ -87,90 +73,97 @@ class ResidualAdapterDeconv(nn.Module):
         return x_conv + x_adapt
 
 
+class ResidualMultipleAdaptersDeconv(nn.Module):
+    def __init__(self, in_channels, 
+                    out_channels, 
+                    kernel_size=5, 
+                    stride=2, 
+                    mean = 0, 
+                    standard_deviation = 0.00,
+                    initialize = "gaussian", 
+                    num_adapter = 3, 
+                    name = [], 
+                    aggregation = "top1", 
+                    threshold = 0):
+        super().__init__()
 
-class SelfAttentionResidualBlock(nn.Module):
-    def __init__(self, in_channels):
-        super(SelfAttentionResidualBlock, self).__init__()
-
-        class SelfAttentionModule(nn.Module):
-            def __init__(self, in_channels, num_heads=1):
-                super(SelfAttentionModule, self).__init__()
-
-                self.attention_multi = nn.MultiheadAttention(embed_dim=in_channels, num_heads=num_heads)
-
-            def forward(self, x):
-                x = x.permute(2, 0, 1)
-                attn_output, _ = self.attention_multi(x, x, x)
-                attn_output = attn_output.permute(1, 2, 0)
-                return attn_output
-
-
-        self.attention = SelfAttentionModule(in_channels)
-
-    def forward(self, x):
-        out = self.attention(x)  
-        # Aggiungi l'input originale al risultato
-        #out += residual
-        return out
+        self.original_model_weights = nn.ConvTranspose2d(
+            in_channels,
+            out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            output_padding=stride - 1,
+            padding=kernel_size // 2,
+        )
 
 
-def conv(in_channels, out_channels, kernel_size=5, stride=2):
-    return nn.Conv2d(
-        in_channels,
-        out_channels,
-        kernel_size=kernel_size,
-        stride=stride,
-        padding=kernel_size // 2,
-    )
-
-def deconv(in_channels, out_channels, kernel_size=5, stride=2):
-    return nn.ConvTranspose2d(
-        in_channels,
-        out_channels,
-        kernel_size=kernel_size,
-        stride=stride,
-        output_padding=stride - 1,
-        padding=kernel_size // 2,
-    )
+        self.mean = mean 
+        self.standard_deviation = standard_deviation
+        self.aggregation = aggregation
+        self.threshold = threshold
 
 
-def adapter_res( channels,   dim_adapter = 0, stride=1, kernel_size=3,  padding = 1, std = 0.0, mean = 0.0, bias = True, name = "",type_adapter = "singular", res = True):
-
-    return Adapter(channels, 
-                            channels, 
-                            dim_adapter=dim_adapter, 
-                            stride = stride, 
-                            padding = padding, 
-                            standard_deviation= std,
-                            mean=mean,
-                            kernel_size= kernel_size, 
-                            bias = bias,
-                            name = name, 
-                            res = res,
-                            type_adapter=type_adapter
-                                   )
+        self.adapters = nn.ModuleList([]) 
+        for i in range(num_adapter):
+            if len(name) == 0:
+                name_ad = "adapter_" + str(i)
+            else: 
+                name_ad = "adapter_" + name[i]
 
 
+            params = OrderedDict([(name_ad,nn.ConvTranspose2d(in_channels, out_channels,  kernel_size = kernel_size, stride = stride, output_padding = stride -1, padding = kernel_size // 2))])  
+            adapter =  nn.Sequential(params)
+            if initialize == "gaussian":
+                adapter.apply(self.initialization)
+            self.adapters.append(adapter)
+
+
+    def initialization(self,m):
+        if isinstance(m, nn.Conv2d) or isinstance(m,nn.Linear) or isinstance(m, nn.ConvTranspose2d) :
+            print("sono entrato qua per inizialissssszzare split connections")
+            nn.init.normal_(m.weight, mean=self.mean, std=self.standard_deviation)
+            if m.bias is not None:
+                torch.nn.init.zeros_(m.bias) 
+
+
+    def forward(self,x, gate_prob):
+        x_conv = self.original_model_weights(x)
+        if self.aggregation == "top1": #in questo caso prendiamo solo l'adapter migliore e lo sommiamo
+            argmax = torch.argmax(gate_prob).item()
+            x_adapt = self.adapters[argmax](x)
+            return x_conv + x_adapt  
+        
+        elif self.aggregation == "weighted":
+            gate_prob = torch.where(gate_prob < self.threshold, torch.zeros_like(gate_prob), gate_prob)
+            x_adapt = torch.sum(torch.stack([self.adapters[i](x)*gate_prob[i] for i in range(self.num_adapter)], dim = 1),dim = 1)
+            return x_conv + x_adapt 
+        else: 
+            raise ValueError("Per ora non ho implementato altro!!!!")
+
+
+    
 
 
 
 
 
-def conv3x3(in_ch: int, out_ch: int, kernel_size: int = 3,stride: int = 1) -> nn.Module:
-    """3x3 convolution with padding."""
-    return nn.Conv2d(in_ch, out_ch, kernel_size=kernel_size, stride=stride, padding=1)
 
 
-def subpel_conv3x3(in_ch: int, out_ch: int, r: int = 1) -> nn.Sequential:
-    """3x3 sub-pixel convolution for up-sampling."""
-    return nn.Sequential(
-        nn.Conv2d(in_ch, out_ch * r ** 2, kernel_size=3, padding=1), nn.PixelShuffle(r)
-    )
 
 
-def conv1x1(in_ch: int, out_ch: int, stride: int = 1) -> nn.Module:
-    """1x1 convolution."""
-    return nn.Conv2d(in_ch, out_ch, kernel_size=1, stride=stride)
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 class Win_noShift_Attention(nn.Module):
     """Window-based self-attention module."""
@@ -326,6 +319,111 @@ class Win_noShift_Attention_Adapter(Win_noShift_Attention):
 
 
 
+class Win_noShift_Attention_Multiple_Adapter(Win_noShift_Attention):
+
+    def __init__(
+        self,
+        dim,
+        num_heads=8,
+        window_size=8,
+        shift_size=0,
+        dim_adapter: int = 1,
+        groups: int = 1,
+        aggregation: str = "top1",
+        stride: int = 1,
+        num_adapter: int = 3,
+        kernel_size: int = 1,
+        std: float = 0.01,
+        mean: float = 0.00,
+        bias: bool = False, 
+        padding: int = 0,
+        name: list =[],
+        type_adapter: str = "singular",
+        position: str = "res_last",
+        threshold: int = 0
+    ):
+        """Win_noShift_Attention with multiple adapters.
+        """
+        super().__init__(dim, num_heads, window_size, shift_size)
+        self.aggregation = aggregation
+        self.num_adapter = num_adapter
+        self.threshold = threshold
+        self.position = position
+        self.adapters = nn.ModuleList([]) 
+        for i in range(num_adapter):
+
+            if len(name) == 0:
+                name_ad = "AttentionAdapter_" + str(i)
+            else: 
+                name_ad = "AttentionAdapter_" + name[i]
+
+
+            params = OrderedDict([
+                    (name_ad,Adapter(dim,
+                                    dim, 
+                                    dim_adapter=dim_adapter, 
+                                    groups=groups, 
+                                    stride = stride, 
+                                    padding = padding, 
+                                    standard_deviation= std,
+                                    mean=mean,
+                                    kernel_size= kernel_size, 
+                                    bias = bias,
+                                    name = name, 
+                                    type_adapter= type_adapter))])
+                                    
+            adapter =  nn.Sequential(params)
+            self.adapters.append(adapter)
+
+
+
+    def aggregate_adapters(self, out, gate_prob):
+        #gate_prob = nn.Softmax(gate_output) # estraggo le probabilità delle singole classi
+        if self.aggregation == "top1":
+            argmax = torch.argmax(gate_prob).item()
+            if self.position == "res":
+                return out  + self.adapters[argmax](out) # applico solo un adapter! 
+            else:
+                return self.adapters[argmax](out)
+            
+        elif self.aggeration == "weighted":
+            gate_prob = torch.where(gate_prob < self.threshold, torch.zeros_like(gate_prob), gate_prob)
+            if self.position == "res":
+                return  out  + torch.sum(torch.stack([self.adapters[i](out)*gate_prob[i] for i in range(self.num_adapter)], dim = 1),dim = 1) # [BS, num_adapter, h, w]
+            else: 
+                return torch.sum(torch.stack([self.adapters[i](out)*gate_prob[i] for i in range(self.num_adapter)], dim = 1),dim = 1)
+        else: 
+            raise ValueError("Per ora non ho implementato altro!!!!")
+
+
+
+
+
+        
+
+
+
+
+    def forward(self, x, gate_prob):
+        identity = x
+        a = self.conv_a(x)
+        b = self.conv_b(x)
+        out = a * torch.sigmoid(b)
+        return self.aggregate_adapters(out, gate_prob) + identity
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 class AttentionBlock(nn.Module):
     def __init__(self, N: int):
@@ -466,3 +564,32 @@ class GDN_Adapter(GDN):
         out = x * norm
 
         return out 
+    
+
+
+
+
+class SelfAttentionResidualBlock(nn.Module):
+    def __init__(self, in_channels):
+        super(SelfAttentionResidualBlock, self).__init__()
+
+        class SelfAttentionModule(nn.Module):
+            def __init__(self, in_channels, num_heads=1):
+                super(SelfAttentionModule, self).__init__()
+
+                self.attention_multi = nn.MultiheadAttention(embed_dim=in_channels, num_heads=num_heads)
+
+            def forward(self, x):
+                x = x.permute(2, 0, 1)
+                attn_output, _ = self.attention_multi(x, x, x)
+                attn_output = attn_output.permute(1, 2, 0)
+                return attn_output
+
+
+        self.attention = SelfAttentionModule(in_channels)
+
+    def forward(self, x):
+        out = self.attention(x)  
+        # Aggiungi l'input originale al risultato
+        #out += residual
+        return out

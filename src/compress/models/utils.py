@@ -2,25 +2,24 @@
 import torch
 import torch.nn as nn
 from compress.zoo import models
-from compressai.ans import BufferedRansEncoder, RansDecoder
-from compress.ops import ste_round
-import copy 
+
+
 
 
 
 def rename_key_for_adapter(key, stringa, nuova_stringa):
     if key.startswith(stringa):
-        key = nuova_stringa  + key[6:]
+        key = nuova_stringa # nuova_stringa  + key[6:]
     return key
+
+
 
 
 
 
 def modify_state_dict(state_dict):
 
-    return {
-        k.replace('original_model_weights.',''): v for k, v in state_dict.items()
-    }
+    return {k.replace("original_model_weights.",""): v for k, v in state_dict.items()}
 
 
 
@@ -33,7 +32,7 @@ def rename_key(key):
     if key.startswith('h_s.'):
         return None
 
-    # ResidualBlockWithStride: 'downsample' -> 'skip'
+    # ResidualBlockWithStride: 'downsample' -> 'skip'sss
     # if ".downsample." in key:
     #     return key.replace("downsample", "skip")
 
@@ -228,8 +227,10 @@ def get_model(args,device, N = 192, M = 320 ):
 
         
         state_dict = modello_base.state_dict()
-        state_dict = {rename_key_for_adapter(k, stringa = "g_s.8.", nuova_stringa = "g_s.9." ): v for k, v in state_dict.items()}
-        state_dict = {rename_key_for_adapter(k, stringa = "g_s.7.",nuova_stringa = "g_s.8."): v for k, v in state_dict.items()}
+        state_dict = {rename_key_for_adapter(k, stringa = "g_s.8.weight", nuova_stringa = "g_s.9.weight" ): v for k, v in state_dict.items()}
+        state_dict = {rename_key_for_adapter(k, stringa = "g_s.8.bias", nuova_stringa = "g_s.9.bias" ): v for k, v in state_dict.items()}
+        state_dict = {rename_key_for_adapter(k, stringa = "g_s.7.weight",nuova_stringa = "g_s.8.weight"): v for k, v in state_dict.items()}
+        state_dict = {rename_key_for_adapter(k, stringa = "g_s.7.bias",nuova_stringa = "g_s.8.bias"): v for k, v in state_dict.items()}
         #state_dict = rename_key_for_adapter(state_dict)
 
 
@@ -280,20 +281,10 @@ def get_model(args,device, N = 192, M = 320 ):
 
         
         state_dict = modello_base.state_dict()
-        #state_dict = {rename_key_for_adapter(k, stringa = "g_s.8.", nuova_stringa = "g_s.9." ): v for k, v in state_dict.items()}
-        #state_dict = {rename_key_for_adapter(k, stringa = "g_s.7.",nuova_stringa = "g_s.8."): v for k, v in state_dict.items()}
-        state_dict = modify_state_dict(state_dict)
-
-        print("******************************** NUOVO *********************")
-        for k in list(net.state_dict().keys()):
-            if "g_s" in k:
-                print(k)
-        print("********************************************")
-        print("******************************** VECCHIO *********************")
-        for k in list(state_dict):
-            if "g_s" in k:
-                print(k)
-        print("********************************************")
+        state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.6.original_model_weights.weight", stringa = "g_s.6.weight" ): v for k, v in state_dict.items()}
+        state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.6.original_model_weights.bias", stringa = "g_s.6.bias" ): v for k, v in state_dict.items()}
+        state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.8.original_model_weights.weight", stringa = "g_s.8.weight" ): v for k, v in state_dict.items()}
+        state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.8.original_model_weights.bias", stringa = "g_s.8.bias" ): v for k, v in state_dict.items()}
 
 
 
@@ -309,23 +300,7 @@ def get_model(args,device, N = 192, M = 320 ):
         return net, baseline
 
 
-def introduce_teacher(args, device):
-    teacher_net = models["base"](N = args.dims_n, M = args.dims_m)
-    checkpoint = torch.load(args.pret_checkpoint_teacher, map_location=device)
-    if "entropy_bottleneck._quantized_cdf" in list(checkpoint.keys()):
-        del checkpoint["entropy_bottleneck._offset"]
-        del checkpoint["entropy_bottleneck._quantized_cdf"]
-        del checkpoint["entropy_bottleneck._cdf_length"]
-    if "gaussian_conditional._quantized_cdf" in list(checkpoint.keys()):
-        del checkpoint["gaussian_conditional._offset"]
-        del checkpoint["gaussian_conditional._quantized_cdf"]
-        del checkpoint["gaussian_conditional._cdf_length"]
-        del checkpoint["gaussian_conditional.scale_table"]
-                     
-    teacher_net.load_state_dict(checkpoint)
-    teacher_net.to(device) 
-    teacher_net.update()
-    return teacher_net
+
     
 
 
@@ -424,25 +399,7 @@ def update_registered_buffers(
         )
 
 
-def conv(in_channels, out_channels, kernel_size=5, stride=2):
-    return nn.Conv2d(
-        in_channels,
-        out_channels,
-        kernel_size=kernel_size,
-        stride=stride,
-        padding=kernel_size // 2,
-    )
 
-
-def deconv(in_channels, out_channels, kernel_size=5, stride=2):     # SN -1 + k - 2p
-    return nn.ConvTranspose2d(
-        in_channels,
-        out_channels,
-        kernel_size=kernel_size,
-        stride=stride,
-        output_padding=stride - 1,
-        padding=kernel_size // 2,
-    )
 
 
 

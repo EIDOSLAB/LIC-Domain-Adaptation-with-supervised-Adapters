@@ -1,35 +1,37 @@
+
 from .cnn import WACNN
 import torch.nn as nn
-
+from compress.ops import ste_round
 from compressai.models.utils import  update_registered_buffers
 from compressai.ans import BufferedRansEncoder, RansDecoder
-from compress.layers.layers import  Win_noShift_Attention_Adapter,   ResidualAdapterDeconv
+from compress.layers.layers import      Win_noShift_Attention , Win_noShift_Attention_Multiple_Adapter , ResidualMultipleAdaptersDeconv
+from compress.layers.utils_function import deconv
 from compress.layers.gdn import GDN
 import torch 
 from compressai.models import CompressionModel
-from compress.layers.utils_function import deconv
+from compress.layers.gate import GateNetwork
+
+import torch.nn.functional as F
 
 
 
-class WACNNSplitConnections(WACNN):
+
+class WACNNGateAdaptive(WACNN):
+
     def __init__(
         self,
         N=192,
         M=320,
-        
-        dim_adapter_attn_1: int = 0,
-        stride_attn_1: int = 1,
-        kernel_size_attn_1: int = 1,
-        padding_attn_1: int = 0,
-        position_attn_1: str = "res_last",
-        type_adapter_attn_1: str = "singular",
+        num_adapter = 3,
 
-        dim_adapter_attn_2: int = 1,
-        stride_attn_2: int = 1,
-        kernel_size_attn_2:int = 1,
-        padding_attn_2: int = 0,
-        position_attn_2: str = "res_last",
-        type_adapter_attn_2: str = "singular",
+
+        dim_adapter_attn: int = 1,
+        stride_attn: int = 1,
+        kernel_size_attn:int = 1,
+        padding_attn: int = 0,
+        position_attn: str = "res_last",
+        type_adapter_attn: str = "singular",
+        aggregation: str = "top1",
 
 
 
@@ -42,39 +44,36 @@ class WACNNSplitConnections(WACNN):
     ):
         super().__init__(N, M, **kwargs)
 
+
+        self.gate = GateNetwork(in_dim= 320, num_adapter=num_adapter)
+
         
+
         self.g_s = nn.Sequential(
-            Win_noShift_Attention_Adapter( dim=M, num_heads=8,window_size=4,shift_size=2, # for the attention (no change)
-                                          dim_adapter=dim_adapter_attn_1,
-                                          kernel_size = kernel_size_attn_1,
-                                          stride = stride_attn_1,
-                                          bias = bias,
-                                          padding = padding_attn_1,
-                                          std = std, 
-                                          position = position_attn_1,
-                                          type_adapter = type_adapter_attn_1,
-                                          mean = mean, 
-                                          groups = groups),
+            Win_noShift_Attention( dim=M, num_heads=8,window_size=4,shift_size=2),  # for the attention (no change)
             deconv(M, N, kernel_size=5, stride=2),
             GDN(N, inverse=True),
             deconv(N, N, kernel_size=5, stride=2),
             GDN(N, inverse=True),
-            Win_noShift_Attention_Adapter(dim=N,num_heads=8,window_size=8,shift_size=4, # for the attention (no change)
-                                          dim_adapter=dim_adapter_attn_2,
-                                          kernel_size = kernel_size_attn_2,
-                                          padding = padding_attn_2,
-                                          stride = stride_attn_2,
+            Win_noShift_Attention_Multiple_Adapter( dim=N,num_heads=8,window_size=8,shift_size=4,
+                                          dim_adapter=dim_adapter_attn,
+                                          kernel_size = kernel_size_attn,
+                                          padding = padding_attn,
+                                          stride = stride_attn,
                                           bias = bias,
                                           std = std,
-                                          position = position_attn_2,
-                                          type_adapter = type_adapter_attn_2,
+                                          position = position_attn,
+                                          type_adapter = type_adapter_attn,
                                           mean = mean, 
-                                          groups = groups),
-            ResidualAdapterDeconv(N, N, kernel_size=5, stride=2), #modificare lo state dict
+                                          groups = groups,
+                                          num_adapter = num_adapter,
+                                          aggregation = aggregation),
+            ResidualMultipleAdaptersDeconv(N, N, kernel_size=5, stride=2, num_adapter = num_adapter), #modificare lo state dict
             GDN(N, inverse=True),
-            ResidualAdapterDeconv(N, 3, kernel_size=5, stride=2), #modificare lo state dict
+            ResidualMultipleAdaptersDeconv(N, 3, kernel_size=5, stride=2, num_adapter = num_adapter), #modificare lo state dict
         )
-    
+
+        self.length_reconstruction_decoder = len(self.g_s)
 
 
     def load_state_dict(self, state_dict, strict: bool = True):
@@ -95,29 +94,98 @@ class WACNNSplitConnections(WACNN):
 
 
 
+    def unfreeze_gate(self):
+        for n,p in self.gate.named_parameters():
+            p.requires_grad = True
+
+
+
 
     def pars_adapter(self, re_grad = False): 
         #for single_adapter in self.adapter_trasforms:
         for n,p in self.g_s.named_parameters(): 
-                if "adapter_transpose" in n or "AdapterModule" in n:
+                if "adapter_transpose" in n or "AttentionAdapter" in n:
                     print("sto sbloccando gli adapter: ",n)
                     p.requires_grad = re_grad 
-            
+
+
+    
+
+    def forward(self, x):
+        y = self.g_a(x)
+        # qua metterei il Gate 
+        gate_values = self.gate(y) #questi sono i valori su cui fare la softmax 
+        gate_probs = F.softmax(gate_values)
+
+        y_shape = y.shape[2:]
+        z = self.h_a(y)
+
+        z_hat, z_likelihoods = self.entropy_bottleneck(z, training = False)
+
+        z_offset = self.entropy_bottleneck._get_medians()
+        z_tmp = z - z_offset
+        z_hat = ste_round(z_tmp) + z_offset
+
+        latent_scales = self.h_scale_s(z_hat)
+        latent_means = self.h_mean_s(z_hat)
+
+        y_slices = y.chunk(self.num_slices, 1)
+        y_hat_slices = []
+        y_likelihood = []
 
 
 
-    def pars_decoder(self,re_grad = False, st = [0,1,2,3,4,5,6,7,8]):
+        for slice_index, y_slice in enumerate(y_slices):
+            support_slices = (y_hat_slices if self.max_support_slices < 0 else y_hat_slices[:self.max_support_slices])
+            mean_support = torch.cat([latent_means] + support_slices, dim=1)
+            mu = self.cc_mean_transforms[slice_index](mean_support)
+            mu = mu[:, :, :y_shape[0], :y_shape[1]]
+
+            scale_support = torch.cat([latent_scales] + support_slices, dim=1)
+            scale = self.cc_scale_transforms[slice_index](scale_support)
+            scale = scale[:, :, :y_shape[0], :y_shape[1]]
+
+            #_, y_slice_likelihood = self.gaussian_conditional(y_slice, scale, mu)
+            _, y_slice_likelihood = self.gaussian_conditional(y_slice, scale, mu)
+            y_likelihood.append(y_slice_likelihood)
+            y_hat_slice = ste_round(y_slice - mu) + mu ##ffff
+            #y_q_slice = self.gaussian_conditional.quantize(y_slice, "symbols", mu)
+            #y_hat_slice = y_q_slice + mu
+
+            lrp_support = torch.cat([mean_support, y_hat_slice], dim=1)
+            lrp = self.lrp_transforms[slice_index](lrp_support)
+            lrp = 0.5 * torch.tanh(lrp)
+            y_hat_slice += lrp
+
+            y_hat_slices.append(y_hat_slice)
+
+        y_hat = torch.cat(y_hat_slices, dim=1)
+
+        y_hat = torch.cat(y_hat_slices, dim=1)
+        y_likelihoods = torch.cat(y_likelihood, dim=1)
+
+        #y_hat = self.adapter(y_hat) + y_hat #aggiunto per l'adapter!!!!
+
+        #x_hat = self.g_s(y_hat)
+
+
+        for j,module in enumerate(self.g_s):
+            if j <= 4:
+                y_hat = module(y_hat)
+            elif 4 < j < self.length_reconstruction_decoder - 1:
+                y_hat = module(y_hat, gate_probs)
+            else: # caso finale in cui j == self.length_reconstruction_decoder -1
+                x_hat = module(y_hat, gate_probs)
+             
+             
         
 
-        for i,lev in enumerate(self.g_s):
-            if i in  st:
-                for n,p in lev.named_parameters():
-                    p.requires_grad = re_grad
-            else:
-                print("pass ",i)
-
-
-
+        return {
+            "x_hat": x_hat,
+            "likelihoods": {"y": y_likelihoods, "z": z_likelihoods},
+            "gate_values": gate_values, 
+            "y_hat":y_hat
+        }
 
     def compress(self, x):
         y = self.g_a(x)
@@ -134,6 +202,8 @@ class WACNNSplitConnections(WACNN):
 
         latent_scales = self.h_scale_s(z_hat)
         latent_means = self.h_mean_s(z_hat)
+
+        gate_values = self.gate(y)
 
         y_slices = y.chunk(self.num_slices, 1)
         y_hat_slices = []
@@ -182,11 +252,14 @@ class WACNNSplitConnections(WACNN):
         y_string = encoder.flush()
         y_strings.append(y_string)
 
-        return {"strings": [y_strings, z_strings], "shape": z.size()[-2:]}
-    
+        return {"strings": [y_strings, z_strings], "shape": z.size()[-2:],"gate_values":gate_values}
 
 
-    def decompress(self, strings, shape):
+
+    def decompress(self, strings, shape, gate_values):
+
+
+        gate_probs = F.softmax(gate_values)
         z_hat = self.entropy_bottleneck.decompress(strings[1], shape)
         latent_scales = self.h_scale_s(z_hat)
         latent_means = self.h_mean_s(z_hat)
@@ -231,8 +304,23 @@ class WACNNSplitConnections(WACNN):
         
             
         y_hat = torch.cat(y_hat_slices, dim=1)
+        #y_hat = self.adapter(y_hat) + y_hat
 
-
-        x_hat = self.g_s(y_hat).clamp_(0, 1)
+        for j,module in enumerate(self.g_s):
+            if j <= 4:
+                y_hat = module(y_hat)
+            elif 4 < j < self.length_reconstruction_decoder - 1:
+                y_hat = module(y_hat, gate_probs)
+            else: # caso finale in cui j == self.length_reconstruction_decoder -1
+                x_hat = module(y_hat, gate_probs).clamp_(0,1)
+             
 
         return {"x_hat": x_hat, "y_hat":y_hat}
+    
+
+
+    def forward_gate(self,x):
+        y = self.g_a(x)
+        # qua metterei il Gate 
+        logits = self.gate(y) #questi sono i valori su cui fare la softmax 
+        return {"x_hat": x, "logits": logits}    

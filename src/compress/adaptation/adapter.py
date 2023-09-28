@@ -228,6 +228,26 @@ class Adapter(nn.Module):
 
             model = nn.ModuleList([attn_model,conv_model])
             return model
+        elif self.type_adapter == "transformer_singular":
+            print("ENTRO SU ATTENTION SINGULAE")
+
+
+            attn_params = OrderedDict([ ("attention_adapter_deconv_",Transformer(dim = self.in_ch,depth = 1).to("cuda"))])
+            attn_model = nn.Sequential(attn_params)
+            attn_model.apply(self.initialization)
+            params = OrderedDict([
+
+                (self.name + "_adapter_conv1",nn.Conv2d(self.in_ch,self.dim_adapter,kernel_size=self.kernel_size,bias=self.bias,stride=self.stride,groups=self.groups,padding = self.padding)),
+                #    ('GeLU0_adapter',nn.GELU()),
+                (self.name + "_adapter_conv2",nn.Conv2d(self.dim_adapter, self.out_ch, kernel_size=self.kernel_size, bias=self.bias,stride=self.stride, groups=self.groups, padding = self.padding))])
+                    
+                    
+            conv_model =  nn.Sequential(params)
+            conv_model.apply(self.initialization)
+            conv_model.to("cuda")
+
+            model = nn.ModuleList([attn_model,conv_model])   
+            return model        
 
         elif self.type_adapter == "multiple":
             
@@ -281,7 +301,7 @@ class Adapter(nn.Module):
             out = self.AdapterModule(x)
             out,_ = reshape_tensor(out,inv = inv)
             return out
-        elif self.type_adapter == "attention_singular":
+        elif self.type_adapter in ("attention_singular","transformer_singular"):
 
             attn = self.AdapterModule[0]
             conv= self.AdapterModule[1]

@@ -80,20 +80,5 @@ def read_image(path: Path, color_bg: tuple = (255, 255, 255)) -> Image.Image:
     return img
 
 
-def calc_psnr(img_1: Image.Image, img_2: Image.Image):
-    return peak_signal_noise_ratio(
-        np.asarray(img_1.convert("RGB")), np.asarray(img_2.convert("RGB"))
-    )
 
 
-def calc_msssim(img_1: Image.Image, img_2: Image.Image) -> float:
-    from pytorch_msssim import MS_SSIM
-
-    x_1 = transforms.ToTensor()(img_1)[None]
-    x_2 = transforms.ToTensor()(img_2)[None]
-
-    return MS_SSIM(data_range=1)(x_1, x_2).item()
-
-
-def calc_bpp(bits, shape):
-    return bits / shape[0] / shape[1]
