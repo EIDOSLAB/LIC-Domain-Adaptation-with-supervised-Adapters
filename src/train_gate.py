@@ -3,7 +3,7 @@ import sys
 import wandb
 import torch
 import torch.optim as optim
-from compress.training import train_one_epoch_gate, test_epoch_gate, GateLoss
+from compress.training import train_one_epoch_gate, test_epoch_gate, GateLoss, compress_with_ac, GateDistorsionLoss, DistorsionLoss, compress_with_ac_gate
 from compress.datasets import   AdapterDataset
 from compress.utils.help_function import CustomDataParallel, configure_optimizers,  create_savepath, save_checkpoint_our, sec_to_hours, set_seed
 from compress.utils.parser import parse_args_gate
@@ -14,6 +14,50 @@ from compress.zoo import models
 
 
 
+def evaluate_base_model(model, args,device):
+    """
+    Valuto la bontà del modello base, di modo da poter vedere se miglioraiamo qualcosa
+    """
+
+    model.to(device)
+    model.update()
+
+    test_transforms = transforms.Compose([transforms.ToTensor()])
+    print("***************************************** KODAK *************************************************")
+    kodak = AdapterDataset(root = args.root, path  =  ["test_kodak.txt"], transform = test_transforms)
+    kodak_f = kodak.samples
+    kodak_filelist = []
+    for i in range(len(kodak_f)):
+        kodak_filelist.append(kodak_f[i][0])
+    psnr, bpp = compress_with_ac(model, kodak_filelist, device, -1, loop=False, writing= args.writing + "kodak_")
+    print(psnr,"  ",bpp)
+
+    print("****************************************** CLIC ****************************************************************")
+    clic = AdapterDataset(root = args.root, path  =  ["test_clic.txt"], transform = test_transforms)
+    clic_f = clic.samples
+    clic_filelist = []
+    for i in range(len(clic_f)):
+        clic_filelist.append(clic_f[i][0])
+    psnr, bpp = compress_with_ac(model, clic_filelist, device, -1, loop=False, writing= args.writing + "clic_")
+    print(psnr,"  ",bpp)
+
+    print("****************************************** sketch ****************************************************************")
+    sketch = AdapterDataset(root = args.root, path  =  ["test_sketch.txt"], transform = test_transforms)
+    sketch_f = sketch.samples
+    sketch_filelist = []
+    for i in range(len(sketch_f)):
+        sketch_filelist.append(sketch_f[i][0])
+    psnr, bpp = compress_with_ac(model, sketch_filelist, device, -1, loop=False, writing= args.writing + "sketch_")
+    print(psnr,"  ",bpp)
+
+    print("****************************************** clipart ****************************************************************")
+    clipart = AdapterDataset(root = args.root, path  =  ["test_clipart.txt"], transform = test_transforms)
+    clipart_f = clipart.samples
+    clipart_filelist = []
+    for i in range(len(clipart_f)):
+        clipart_filelist.append(clipart_f[i][0])
+    psnr, bpp = compress_with_ac(model, clipart_filelist, device, -1, loop=False, writing= args.writing + "clipart_")
+    print(psnr,"  ",bpp)
 
 
 
@@ -22,7 +66,7 @@ def handle_trainable_pars(net, args, epoch):
     if args.training_policy == "gate":
         print("porca troia ")
         net.unfreeze_gate()
-    elif args.training_polict == "e2e": #and args.starting_epoch < epoch:
+    elif args.training_policy == "e2e": #and args.starting_epoch < epoch:
         net.unfreeze_gate()
         if args.starting_epoch < epoch:
             net.unfreeze_adapters()
@@ -72,14 +116,14 @@ def get_gate_model(args,device):
                         mean = args.mean,                              
                         bias = args.bias,
                               ) 
-
+    """
     print("*********************************************************************************")
-    print("************************************ NUOVO MODELLO *********************************************")
+    print("************************************ NUOVO MODELLO ******************************************22222***")
     print("*********************************************************************************")
     for k in list(net.state_dict().keys()):
         if "g_s" in k or "g_a" in k:
             print(k)
-
+    """
 
 
 
@@ -91,18 +135,19 @@ def get_gate_model(args,device):
     state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.8.original_model_weights.weight", stringa = "g_s.8.weight" ): v for k, v in state_dict.items()}
     state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.8.original_model_weights.bias", stringa = "g_s.8.bias" ): v for k, v in state_dict.items()}
     
-    
+    """
     print("*********************************************************************************")
     print("************************************ VECCHIO  MODELLO MODIFICATO *********************************************")
     print("*********************************************************************************")
     for k in list(state_dict.keys()):
         if "g_s" in k or "g_a" in k:
             print(k)
+    """
     
     
     info = net.load_state_dict(state_dict, strict=False)
     net.to(device)
-    return net
+    return net, modello_base
 
 
 
@@ -117,8 +162,8 @@ def main(argv):
     # gestisco i dataset 
 
     train_transforms = transforms.Compose([ transforms.RandomCrop(args.patch_size), transforms.ToTensor()])
-    valid_transforms = transforms.Compose([ transforms.CenterCrop(args.patch_size), transforms.ToTensor()])
-    test_transforms = transforms.Compose([transforms.Resize(256),transforms.ToTensor()])
+    valid_transforms = transforms.Compose([  transforms.ToTensor()]) #transforms.CenterCrop(args.patch_size),
+    test_transforms = transforms.Compose([transforms.ToTensor()])
 
 
     train_dataset = AdapterDataset(root = args.root, path = args.train_datasets, transform= train_transforms)
@@ -126,22 +171,59 @@ def main(argv):
     
 
     valid_dataset = AdapterDataset(root = args.root, path = args.valid_datasets, transform= valid_transforms)
-    valid_dataloader = DataLoader(valid_dataset,batch_size=args.batch_size,num_workers=4,shuffle=False, pin_memory=(device == device),)
+    valid_dataloader = DataLoader(valid_dataset,batch_size= 1 ,num_workers=4,shuffle=False, pin_memory=(device == device),)
     
 
-    test_total_dataset = AdapterDataset(root = args.root, path  = args.test_datasets, transform = valid_transforms)
+    test_total_dataset = AdapterDataset(root = args.root, path  =  args.test_datasets, transform = test_transforms)
     
-    test_total_dataloader = DataLoader(test_total_dataset,batch_size= args.batch_size,num_workers=4,shuffle=False, pin_memory=(device == device),)
+    test_total_dataloader = DataLoader(test_total_dataset,batch_size= 1,num_workers=4,shuffle=False, pin_memory=(device == device),)
     
-    net = get_gate_model(args, device)
+    net, modello_base = get_gate_model(args, device)
+
+    #evaluate_base_model(modello_base,args,device)
+
+
+    print("CONTROLLO DATASET!!!!!")
+
+    train_tens = torch.zeros(len(train_dataset.samples))
+
+    for i in range(len(train_dataset.samples)):
+        train_tens[i] = int(train_dataset.samples[i][1])
+
+
+    print("----------------------------> train distribution ",torch.unique(train_tens, return_counts = True))
+
+
+    train_tens = torch.zeros(len(valid_dataset.samples))
+
+    for i in range(len(valid_dataset.samples)):
+        train_tens[i] = int(valid_dataset.samples[i][1])
+
+
+    print("----------------------------> valid distribution ",torch.unique(train_tens, return_counts = True))
 
 
 
-    if args.cuda and torch.cuda.device_count() > 1:
-        net = CustomDataParallel(net)
+    train_tens = torch.zeros(len(test_total_dataset.samples))
+
+    for i in range(len(test_total_dataset.samples)):
+        train_tens[i] = int(test_total_dataset.samples[i][1])
 
 
-    criterion =  GateLoss()
+    print("---------------------------->test distribution ",torch.unique(train_tens, return_counts = True))
+
+
+
+
+
+    if args.training_policy == "gate":
+        criterion =  GateLoss()
+    elif args.training_policy == "e2e":
+        criterion = GateDistorsionLoss(lmbda = args.lmbda)
+    else:
+        criterion = DistorsionLoss()
+
+
     optimizer, _ = configure_optimizers(net, args)
 
     lr_scheduler =  optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", factor=0.5, patience=args.patience)
@@ -151,15 +233,6 @@ def main(argv):
     best_loss = float("inf")
 
 
-
-
-
-
-    model_tr_parameters = sum(p.numel() for p in net.parameters() if p.requires_grad)
-    model_fr_parameters = sum(p.numel() for p in net.parameters() if p.requires_grad== False)
-        
-    print(" Ttrainable parameters prima : ",model_tr_parameters)
-    print(" freeze parameters prima: ", model_fr_parameters)
     epoch = 0
 
     handle_trainable_pars(net,args, epoch)
@@ -171,6 +244,7 @@ def main(argv):
     for epoch in range(0, args.epochs):
         print("************************************************************************************************")
         print("*************************************** EPOCH  ",epoch," *****************************************")
+        handle_trainable_pars(net, args, epoch)
         model_tr_parameters = sum(p.numel() for p in net.parameters() if p.requires_grad)
         model_fr_parameters = sum(p.numel() for p in net.parameters() if p.requires_grad== False)
         print(" trainable parameters: ",model_tr_parameters)

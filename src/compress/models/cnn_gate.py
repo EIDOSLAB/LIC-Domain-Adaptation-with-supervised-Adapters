@@ -29,12 +29,12 @@ class WACNNGateAdaptive(WACNN):
         stride_attn: int = 1,
         kernel_size_attn:int = 1,
         padding_attn: int = 0,
-        position_attn: str = "res_last",
+        position_attn: str = "res",
         type_adapter_attn: str = "singular",
         aggregation: str = "top1",
 
 
-
+        mid_dim: int = 64,
         bias: bool = True,
         std: float = 0.00,
         mean: float = 0.00,
@@ -45,7 +45,7 @@ class WACNNGateAdaptive(WACNN):
         super().__init__(N, M, **kwargs)
 
 
-        self.gate = GateNetwork(in_dim= 320, num_adapter=num_adapter)
+        self.gate = GateNetwork(in_dim= 320, mid_dim = mid_dim ,num_adapter=num_adapter)
 
         
 
@@ -68,7 +68,7 @@ class WACNNGateAdaptive(WACNN):
                                           groups = groups,
                                           num_adapter = num_adapter,
                                           aggregation = aggregation),
-            ResidualMultipleAdaptersDeconv(N, N, kernel_size=5, stride=2, num_adapter = num_adapter), #modificare lo state dict
+            ResidualMultipleAdaptersDeconv(N, N, kernel_size=5, stride=2, num_adapter = num_adapter), #modificare lo state dictddd
             GDN(N, inverse=True),
             ResidualMultipleAdaptersDeconv(N, 3, kernel_size=5, stride=2, num_adapter = num_adapter), #modificare lo state dict
         )
@@ -101,7 +101,8 @@ class WACNNGateAdaptive(WACNN):
 
 
 
-    def pars_adapter(self, re_grad = False): 
+
+    def unfreeze_adapters(self, re_grad = True): 
         #for single_adapter in self.adapter_trasforms:
         for n,p in self.g_s.named_parameters(): 
                 if "adapter_transpose" in n or "AttentionAdapter" in n:
@@ -170,9 +171,10 @@ class WACNNGateAdaptive(WACNN):
 
 
         for j,module in enumerate(self.g_s):
-            if j <= 4:
+            if j in (0,1,2,3,4,7):
+                
                 y_hat = module(y_hat)
-            elif 4 < j < self.length_reconstruction_decoder - 1:
+            elif j in (5,6):
                 y_hat = module(y_hat, gate_probs)
             else: # caso finale in cui j == self.length_reconstruction_decoder -1
                 x_hat = module(y_hat, gate_probs)
@@ -183,7 +185,7 @@ class WACNNGateAdaptive(WACNN):
         return {
             "x_hat": x_hat,
             "likelihoods": {"y": y_likelihoods, "z": z_likelihoods},
-            "gate_values": gate_values, 
+            "logits": gate_values, 
             "y_hat":y_hat
         }
 
@@ -307,15 +309,17 @@ class WACNNGateAdaptive(WACNN):
         #y_hat = self.adapter(y_hat) + y_hat
 
         for j,module in enumerate(self.g_s):
-            if j <= 4:
+            if j in (0,1,2,3,4,7):
+                
                 y_hat = module(y_hat)
-            elif 4 < j < self.length_reconstruction_decoder - 1:
+            elif j in (5,6):
                 y_hat = module(y_hat, gate_probs)
             else: # caso finale in cui j == self.length_reconstruction_decoder -1
                 x_hat = module(y_hat, gate_probs).clamp_(0,1)
              
+             
 
-        return {"x_hat": x_hat, "y_hat":y_hat}
+        return {"x_hat": x_hat, "y_hat":y_hat, "logits":gate_probs}
     
 
 

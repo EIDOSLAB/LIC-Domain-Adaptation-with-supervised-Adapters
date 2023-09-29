@@ -22,7 +22,7 @@ class GateLoss(nn.Module):
 
 
 class GateDistorsionLoss(nn.Module):
-    def __init__(self, lmbda = 1e-2):
+    def __init__(self, lmbda = 0.1):
         super().__init__()
         self.lmbda = lmbda 
         self.gate_metric = nn.CrossEntropyLoss()
@@ -33,13 +33,14 @@ class GateDistorsionLoss(nn.Module):
 
     def forward(self, output, target):
 
-        logits = output["logits"]
-        classes = target["classes"]
-        out["CrossEntropy"] = self.gate_metric(logits, classes)
-        N, _, H, W = target.size()      
         out = {}
 
-        out["mse_loss"] = self.dist_metric(output["x_hat"], target)
+        logits = output["logits"]
+        classes = target[1]
+        out["CrossEntropy"] = self.gate_metric(logits, classes)
+        N, _, H, W = target[0].size()      
+
+        
         num_pixels = N * H * W
     
            
@@ -49,7 +50,9 @@ class GateDistorsionLoss(nn.Module):
         out["z_bpp"]  = torch.log(output["likelihoods"]["z"]).sum() / (-math.log(2) * num_pixels) 
         out["bpp_loss"] = sum((torch.log(likelihoods).sum() / (-math.log(2) * num_pixels)) for likelihoods in output["likelihoods"].values())   
         
-        out["loss"] = self.lmbda * 255**2 * out["mse_loss"] + out["CrossEntropy"]
+        
+        out["mse_loss"] = self.lmbda * 255**2 *self.dist_metric(output["x_hat"], target[0])  # lambda è qua
+        out["loss"] =   out["mse_loss"] + out["CrossEntropy"]
 
         return out  
     

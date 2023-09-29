@@ -299,14 +299,16 @@ class AdapterDataset(Dataset):
 
 
     def __init__(self, root, path=["train.txt"], transform = None):
+        self.samples =[]# [f for f in splitdir.iterdir() if f.is_file()]   
         for p in path:
+
             splitdir = Path(root) / p
 
             file_d = open(splitdir,"r") 
             Lines = file_d.readlines()
 
 
-            self.samples =[]# [f for f in splitdir.iterdir() if f.is_file()]          
+                   
 
             for i,lines in enumerate(Lines):
                 if i%10000==0:

@@ -83,7 +83,7 @@ class ResidualMultipleAdaptersDeconv(nn.Module):
                     initialize = "gaussian", 
                     num_adapter = 3, 
                     name = [], 
-                    aggregation = "top1", 
+                    aggregation = "weighted", 
                     threshold = 0):
         super().__init__()
 
@@ -101,6 +101,7 @@ class ResidualMultipleAdaptersDeconv(nn.Module):
         self.standard_deviation = standard_deviation
         self.aggregation = aggregation
         self.threshold = threshold
+        self.num_adapter = num_adapter
 
 
         self.adapters = nn.ModuleList([]) 
@@ -135,7 +136,14 @@ class ResidualMultipleAdaptersDeconv(nn.Module):
         
         elif self.aggregation == "weighted":
             gate_prob = torch.where(gate_prob < self.threshold, torch.zeros_like(gate_prob), gate_prob)
-            x_adapt = torch.sum(torch.stack([self.adapters[i](x)*gate_prob[i] for i in range(self.num_adapter)], dim = 1),dim = 1)
+            
+            
+            summed_out = x.unsqueeze(1).repeat(1,self.num_adapter,1,1,1) # [16,3,192,18,24] #torch.sum(torch.stack([self.adapters[i](out)*gate_prob[i] for i in range(self.num_adapter)], dim = 1),dim = 1) 
+            ad_summed_out = torch.stack([self.adapters[i](summed_out[:,i,:,:,:]) for i in range(self.num_adapter)], dim = 1)
+            ad_summed_out = ad_summed_out*gate_prob[:,:,None,None,None]
+            x_adapt = torch.sum(ad_summed_out, dim =1) #[16,192,18,24]
+            
+            #x_adapt = torch.sum(torch.stack([self.adapters[i](x)*gate_prob[i] for i in range(self.num_adapter)], dim = 1),dim = 1)
             return x_conv + x_adapt 
         else: 
             raise ValueError("Per ora non ho implementato altro!!!!")
@@ -369,7 +377,7 @@ class Win_noShift_Attention_Multiple_Adapter(Win_noShift_Attention):
                                     mean=mean,
                                     kernel_size= kernel_size, 
                                     bias = bias,
-                                    name = name, 
+                                    name = name_ad, 
                                     type_adapter= type_adapter))])
                                     
             adapter =  nn.Sequential(params)
@@ -379,6 +387,7 @@ class Win_noShift_Attention_Multiple_Adapter(Win_noShift_Attention):
 
     def aggregate_adapters(self, out, gate_prob):
         #gate_prob = nn.Softmax(gate_output) # estraggo le probabilità delle singole classi
+
         if self.aggregation == "top1":
             argmax = torch.argmax(gate_prob).item()
             if self.position == "res":
@@ -386,12 +395,16 @@ class Win_noShift_Attention_Multiple_Adapter(Win_noShift_Attention):
             else:
                 return self.adapters[argmax](out)
             
-        elif self.aggeration == "weighted":
+        elif self.aggregation == "weighted":
             gate_prob = torch.where(gate_prob < self.threshold, torch.zeros_like(gate_prob), gate_prob)
+            summed_out = out.unsqueeze(1).repeat(1,self.num_adapter,1,1,1) # [16,3,192,18,24] #torch.sum(torch.stack([self.adapters[i](out)*gate_prob[i] for i in range(self.num_adapter)], dim = 1),dim = 1) 
+            ad_summed_out = torch.stack([self.adapters[i](summed_out[:,i,:,:,:]) for i in range(self.num_adapter)], dim = 1)
+            ad_summed_out = ad_summed_out*gate_prob[:,:,None,None,None]
+            ad_summed_out = torch.sum(ad_summed_out, dim =1) #[16,192,18,24]
             if self.position == "res":
-                return  out  + torch.sum(torch.stack([self.adapters[i](out)*gate_prob[i] for i in range(self.num_adapter)], dim = 1),dim = 1) # [BS, num_adapter, h, w]
+                return  out  + ad_summed_out # torch.sum(torch.stack([self.adapters[i](out)*gate_prob[i] for i in range(self.num_adapter)], dim = 1),dim = 1) # [BS, num_adapter, h, w]
             else: 
-                return torch.sum(torch.stack([self.adapters[i](out)*gate_prob[i] for i in range(self.num_adapter)], dim = 1),dim = 1)
+                return ad_summed_out #torch.sum(torch.stack([self.adapters[i](out)*gate_prob[i] for i in range(self.num_adapter)], dim = 1),dim = 1)
         else: 
             raise ValueError("Per ora non ho implementato altro!!!!")
 

@@ -281,7 +281,7 @@ def compress_with_ac(model,  filelist, device, epoch, loop = True,  writing = No
                 f.write("SEQUENCE "  +   nome_immagine + " BITS " +  str(bpp) + " PSNR " +  str(psnr_im)  + " MSSIM " +  str(ms_ssim_im) + "\n")
                 f.close()  
                 
-            print("image: ",d,": ",bpp," ",compute_psnr(x, out_dec["x_hat"]))
+            #print("image: ",d,": ",bpp," ",compute_psnr(x, out_dec["x_hat"]))
 
 
 
@@ -309,7 +309,7 @@ def compress_with_ac(model,  filelist, device, epoch, loop = True,  writing = No
 
 
 
-    return bpp_loss.avg
+    return psnr_val.avg, bpp_loss.avg
 
 
 
