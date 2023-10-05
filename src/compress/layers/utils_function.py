@@ -1,5 +1,6 @@
 
 import torch.nn as nn
+import torch
 
 def conv(in_channels, out_channels, kernel_size=5, stride=2):
     return nn.Conv2d(
@@ -36,3 +37,13 @@ def subpel_conv3x3(in_ch: int, out_ch: int, r: int = 1) -> nn.Sequential:
 def conv1x1(in_ch: int, out_ch: int, stride: int = 1) -> nn.Module:
     """1x1 convolution."""
     return nn.Conv2d(in_ch, out_ch, kernel_size=1, stride=stride)
+
+
+
+class ZeroLayer(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return torch.zeros_like(x)

@@ -189,7 +189,7 @@ class Adapter(nn.Module):
                     print("entro qua che è il punto in cui faccio come wacv!!!!!")
                     params = OrderedDict([
                     (self.name + "_adapter_conv1",nn.Conv2d(self.in_ch,self.dim_adapter,kernel_size=self.kernel_size,bias=self.bias,stride=self.stride,groups=self.groups,padding = self.padding)),
-                  #  ('GeLU0_adapter',nn.GELU()),
+                 #   ('ReLU0_adapter',nn.RsELU()),
                     (self.name + "_adapter_conv2",nn.Conv2d(self.dim_adapter, self.out_ch, kernel_size=self.kernel_size, bias=self.bias,stride=self.stride, groups=self.groups, padding = self.padding))])
                     
                     
@@ -249,34 +249,7 @@ class Adapter(nn.Module):
             model = nn.ModuleList([attn_model,conv_model])   
             return model        
 
-        elif self.type_adapter == "multiple":
-            
-            
- 
-            encoder_params = OrderedDict([ ("adapter_multiple_encoder_conv0",conv3x3(self.in_ch, self.in_ch)),
-                                          ("adapter_multiple_encoder_gelu0",nn.GELU()),
-                                           ("adapter_multiple_encoder_conv1",conv3x3(self.in_ch, self.in_ch//2)),
-                                            ("adapter_multiple_encoder_gelu1",nn.GELU()),
-                                            ("adapter_multuple_encoder_conv2",conv3x3(self.in_ch//2, self.in_ch//2, stride=2))
-                                          ])
-            
 
-            encoder = nn.Sequential(encoder_params)
-
-            encoder.apply(self.initialization)        
-            decoder_params = OrderedDict([ ("adapter_multiple_decoder_conv0",subpel_conv3x3(self.in_ch//2, self.in_ch//2,2)),
-                                          ("adapter_multiple_encoder_gelu0",nn.GELU()),
-                                           ("adapter_multuple_encoder_conv1",subpel_conv3x3(self.in_ch//2, self.in_ch,2 )),
-                                            ("adapter_multiple_encoder_gelu1",nn.GELU()),
-                                            ("adapter_multuple_encoder_conv2",conv3x3(self.in_ch, self.in_ch, stride=2))
-                                          ])
-            
-
-            decoder = nn.Sequential(decoder_params)
-            decoder.apply(self.initialization)
-
-            model = nn.ModuleList([encoder,decoder])
-            return model
            
         else:
             raise ValueError("Per ora non ho implementato altro!!!!")

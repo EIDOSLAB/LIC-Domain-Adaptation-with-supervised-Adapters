@@ -20,7 +20,7 @@ from torch import Tensor
 
 from compress.ops.parametrizers import NonNegativeParametrizer
 
-__all__ = ["GDN", "GDN_Adapter"]
+
 
 
 class GDN(nn.Module):

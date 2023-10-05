@@ -16,20 +16,16 @@
 from torch import Tensor
 import torch
 import torch.nn as nn
-from .win_attention import WinBasedAttention, WinBaseAttentionAdapter
+from .win_attention import WinBaseAttentionAdapter
 from compress.adaptation.adapter import Adapter
 #from .wacn_adapter import define_adapter, init_adapter_layer
-import torch.nn.functional as F
-from compressai.ops.parametrizers import NonNegativeParametrizer
+
 from collections import OrderedDict
 from .utils_function import  conv1x1, conv3x3
+from .base import Win_noShift_Attention
 
-__all__ = [
-    "Win_noShift_Attention",
-    "AttentionBlock",
-    "SelfAttentionResidualBlock"
 
-]
+
 
 
 
@@ -49,14 +45,11 @@ class ResidualAdapterDeconv(nn.Module):
         params = OrderedDict([("adapter_transpose_conv1",nn.ConvTranspose2d(in_channels, out_channels,  kernel_size = kernel_size, stride = stride, output_padding = stride -1, padding = kernel_size // 2))])
                     
                     
-        
-        
-
         self.Adapterconv =  nn.Sequential(params)
         self.mean = mean 
         self.standard_deviation = standard_deviation
         
-        if initialize == "gaussian":
+        if initialize == "gaussian": #init
             self.Adapterconv.apply(self.initialization)
     
 
@@ -73,6 +66,29 @@ class ResidualAdapterDeconv(nn.Module):
         return x_conv + x_adapt
 
 
+
+class ZeroDeconvLayer(nn.Module):
+    def __init__(self,  out_channels, kernel_size, stride ):
+        super().__init__()
+        self.out_channels = out_channels 
+        self.kernel_size = kernel_size
+        self.stride = stride 
+        self.padding =  self.kernel_size // 2
+        self.output_padding = self.stride -1
+
+    
+    def forward(self,x):
+        bs,_,w,h = x.shape
+
+
+
+        w_out = (w - 1)*self.stride - 2*self.padding + self.kernel_size + self.output_padding
+        h_out = (h - 1)*self.stride - 2*self.padding + self.kernel_size + self.output_padding
+
+        y = torch.zeros((bs,self.out_channels,w_out, h_out )).to("cuda")
+        return y
+
+
 class ResidualMultipleAdaptersDeconv(nn.Module):
     def __init__(self, in_channels, 
                     out_channels, 
@@ -84,7 +100,8 @@ class ResidualMultipleAdaptersDeconv(nn.Module):
                     num_adapter = 3, 
                     name = [], 
                     aggregation = "weighted", 
-                    threshold = 0):
+                    threshold = 0,
+                    skipped = False):
         super().__init__()
 
         self.original_model_weights = nn.ConvTranspose2d(
@@ -107,12 +124,21 @@ class ResidualMultipleAdaptersDeconv(nn.Module):
         self.adapters = nn.ModuleList([]) 
         for i in range(num_adapter):
             if len(name) == 0:
-                name_ad = "adapter_" + str(i)
-            else: 
-                name_ad = "adapter_" + name[i]
+                if i == 0 and skipped:
+                    name_ad = "adapter_skipped" + str(i)
+                else:
+                    name_ad = "adapter_" + str(i)
+            else:
+                if i == 0 and skipped:
+                    name_ad = "adapter_skipped" + name[i]
+                else:
+                    name_ad = "adapter_" + name[i]
 
 
-            params = OrderedDict([(name_ad,nn.ConvTranspose2d(in_channels, out_channels,  kernel_size = kernel_size, stride = stride, output_padding = stride -1, padding = kernel_size // 2))])  
+            if skipped and i == 0:   
+                params = OrderedDict([(name_ad,ZeroDeconvLayer(out_channels,kernel_size,stride))])  
+            else:
+                params = OrderedDict([(name_ad,nn.ConvTranspose2d(in_channels, out_channels,  kernel_size = kernel_size, stride = stride, output_padding = stride -1, padding = kernel_size // 2))]) 
             adapter =  nn.Sequential(params)
             if initialize == "gaussian":
                 adapter.apply(self.initialization)
@@ -121,32 +147,47 @@ class ResidualMultipleAdaptersDeconv(nn.Module):
 
     def initialization(self,m):
         if isinstance(m, nn.Conv2d) or isinstance(m,nn.Linear) or isinstance(m, nn.ConvTranspose2d) :
-            print("sono entrato qua per inizialissssszzare split connections")
             nn.init.normal_(m.weight, mean=self.mean, std=self.standard_deviation)
             if m.bias is not None:
                 torch.nn.init.zeros_(m.bias) 
 
 
-    def forward(self,x, gate_prob):
+    def forward(self,x, gate_prob, oracle):
+
         x_conv = self.original_model_weights(x)
-        if self.aggregation == "top1": #in questo caso prendiamo solo l'adapter migliore e lo sommiamo
-            argmax = torch.argmax(gate_prob).item()
-            x_adapt = self.adapters[argmax](x)
-            return x_conv + x_adapt  
-        
-        elif self.aggregation == "weighted":
-            gate_prob = torch.where(gate_prob < self.threshold, torch.zeros_like(gate_prob), gate_prob)
-            
-            
-            summed_out = x.unsqueeze(1).repeat(1,self.num_adapter,1,1,1) # [16,3,192,18,24] #torch.sum(torch.stack([self.adapters[i](out)*gate_prob[i] for i in range(self.num_adapter)], dim = 1),dim = 1) 
-            ad_summed_out = torch.stack([self.adapters[i](summed_out[:,i,:,:,:]) for i in range(self.num_adapter)], dim = 1)
-            ad_summed_out = ad_summed_out*gate_prob[:,:,None,None,None]
-            x_adapt = torch.sum(ad_summed_out, dim =1) #[16,192,18,24]
-            
-            #x_adapt = torch.sum(torch.stack([self.adapters[i](x)*gate_prob[i] for i in range(self.num_adapter)], dim = 1),dim = 1)
-            return x_conv + x_adapt 
+
+        if oracle is None:
+            argmax = torch.argmax(gate_prob, dim = 1)
+        else:
+            #print("the oracle is --> ",oracle)
+            argmax = oracle # prendo le classi dell'oracolo
+
+    
+        if self.aggregation == "top1" or oracle is not None:
+            #one ho encoding 
+            one_hot_matrix = torch.eye(self.num_adapter)
+            one_hot_encoded = one_hot_matrix[argmax]
+            gate_prob = one_hot_encoded.to("cuda")
+        elif self.aggregation == "weighted" :
+
+            gate_prob = torch.where(gate_prob < self.threshold, torch.zeros_like(gate_prob), gate_prob).to("cuda")
+
+
         else: 
-            raise ValueError("Per ora non ho implementato altro!!!!")
+            raise ValueError("Per ora non ho implementato altro!!!!!!!")
+
+
+
+            
+            
+        summed_out = x.unsqueeze(1).repeat(1,self.num_adapter,1,1,1) # [16,3,192,18,24] #torch.sum(torch.stack([self.adapters[i](out)*gate_prob[i] for i in range(self.num_adapter)], dim = 1),dim = 1) 
+        ad_summed_out = torch.stack([self.adapters[i](summed_out[:,i,:,:,:]) for i in range(self.num_adapter)], dim = 1)
+        ad_summed_out = ad_summed_out*gate_prob[:,:,None,None,None]
+         
+        x_adapt = torch.sum(ad_summed_out, dim =1) #[16,192,18,24]
+            
+        #x_adapt = torch.sum(torch.stack([self.adapters[i](x)*gate_prob[i] for i in range(self.num_adapter)], dim = 1),dim = 1)
+        return x_conv + x_adapt 
 
 
     
@@ -155,101 +196,6 @@ class ResidualMultipleAdaptersDeconv(nn.Module):
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-class Win_noShift_Attention(nn.Module):
-    """Window-based self-attention module."""
-
-    def __init__(self, dim, num_heads=8, window_size=8, shift_size=0):
-        super().__init__()
-        N = dim
-
-        class ResidualUnit(nn.Module):
-            """Simple residual unit."""
-
-            def __init__(self):
-                super().__init__()
-                self.conv = nn.Sequential(
-                    conv1x1(N, N // 2),
-                    nn.GELU(),
-                    conv3x3(N // 2, N // 2),
-                    nn.GELU(),
-                    conv1x1(N // 2, N),
-                )
-                self.relu = nn.GELU()
-
-            def forward(self, x):
-                identity = x
-                out = self.conv(x)
-                out += identity
-                out = self.relu(out)
-                return out
-
-
-
-            def initialize_weights(self, pretrained_layer):
-                for i,l in enumerate(pretrained_layer.conv):
-                    if i%2 == 0:
-                        self.conv[i].weight = pretrained_layer.conv[i].weight
-                        self.conv[i].weight.requires_grad = True
-                        self.conv[i].bias = pretrained_layer.conv[i].bias
-                        self.conv[i].requires_grad = True 
-                    else: 
-                        continue
-
-        self.conv_a = nn.Sequential(ResidualUnit(), ResidualUnit(), ResidualUnit())
-
-        self.conv_b = nn.Sequential(
-            WinBasedAttention(dim=dim, num_heads=num_heads, window_size=window_size, shift_size=shift_size),
-            ResidualUnit(),
-            ResidualUnit(),
-            ResidualUnit(),
-            conv1x1(N, N),
-        )
-
-    def forward(self, x):
-        identity = x
-        a = self.conv_a(x)
-        b = self.conv_b(x)
-        out = a * torch.sigmoid(b)
-        out += identity
-        return out
-
-    def initialize_weights(self, pretrained_layer):
-        print("starting initializing weights of win_noshift_attention")
-
-        with torch.no_grad():
-            for i,l in enumerate(pretrained_layer.conv_b):
-
-                if i == 0:
-  
-                    continue
-                elif i < len(pretrained_layer.conv_b) - 1:
-   
-                    self.conv_b[i].initialize_weights(pretrained_layer.conv_b[i])
-                else:
-                    self.conv_b[i].weight = pretrained_layer.conv_b[i].weight
-                    self.conv_b[i].weight.requires_grad = True
-                    self.conv_b[i].bias = pretrained_layer.conv_b[i].bias
-                    self.conv_b[i].requires_grad = True                    
-            for i,l in enumerate(pretrained_layer.conv_a):
-                self.conv_a[i].initialize_weights(pretrained_layer.conv_a[i])
 
 
 
@@ -347,7 +293,7 @@ class Win_noShift_Attention_Multiple_Adapter(Win_noShift_Attention):
         padding: int = 0,
         name: list =[],
         type_adapter: str = "singular",
-        position: str = "res_last",
+        position: str = "res",
         threshold: int = 0
     ):
         """Win_noShift_Attention with multiple adapters.
@@ -369,45 +315,54 @@ class Win_noShift_Attention_Multiple_Adapter(Win_noShift_Attention):
             params = OrderedDict([
                     (name_ad,Adapter(dim,
                                     dim, 
-                                    dim_adapter=dim_adapter, 
+                                    dim_adapter=dim_adapter[i], 
                                     groups=groups, 
-                                    stride = stride, 
-                                    padding = padding, 
+                                    stride = stride[i], 
+                                    padding = padding[i], 
                                     standard_deviation= std,
                                     mean=mean,
-                                    kernel_size= kernel_size, 
+                                    kernel_size= kernel_size[i], 
                                     bias = bias,
                                     name = name_ad, 
-                                    type_adapter= type_adapter))])
+                                    type_adapter= type_adapter[i]))])
                                     
             adapter =  nn.Sequential(params)
             self.adapters.append(adapter)
 
 
 
-    def aggregate_adapters(self, out, gate_prob):
+    def aggregate_adapters(self, out, gate_prob, oracle):
         #gate_prob = nn.Softmax(gate_output) # estraggo le probabilità delle singole classi
 
-        if self.aggregation == "top1":
-            argmax = torch.argmax(gate_prob).item()
-            if self.position == "res":
-                return out  + self.adapters[argmax](out) # applico solo un adapter! 
-            else:
-                return self.adapters[argmax](out)
-            
-        elif self.aggregation == "weighted":
-            gate_prob = torch.where(gate_prob < self.threshold, torch.zeros_like(gate_prob), gate_prob)
-            summed_out = out.unsqueeze(1).repeat(1,self.num_adapter,1,1,1) # [16,3,192,18,24] #torch.sum(torch.stack([self.adapters[i](out)*gate_prob[i] for i in range(self.num_adapter)], dim = 1),dim = 1) 
-            ad_summed_out = torch.stack([self.adapters[i](summed_out[:,i,:,:,:]) for i in range(self.num_adapter)], dim = 1)
-            ad_summed_out = ad_summed_out*gate_prob[:,:,None,None,None]
-            ad_summed_out = torch.sum(ad_summed_out, dim =1) #[16,192,18,24]
-            if self.position == "res":
-                return  out  + ad_summed_out # torch.sum(torch.stack([self.adapters[i](out)*gate_prob[i] for i in range(self.num_adapter)], dim = 1),dim = 1) # [BS, num_adapter, h, w]
-            else: 
-                return ad_summed_out #torch.sum(torch.stack([self.adapters[i](out)*gate_prob[i] for i in range(self.num_adapter)], dim = 1),dim = 1)
-        else: 
-            raise ValueError("Per ora non ho implementato altro!!!!")
+        if oracle is None:
+            argmax = torch.argmax(gate_prob, dim = 1)
+        else:
+            #print("the oracle is --> ",oracle)
+            argmax = oracle # prendo le classi dell'oracolo
 
+    
+        if self.aggregation == "top1" or oracle is not None:
+            #one ho encoding 
+            one_hot_matrix = torch.eye(self.num_adapter)
+            one_hot_encoded = one_hot_matrix[argmax]
+            gate_prob = one_hot_encoded.to("cuda")
+            #if oracle is not None:
+                #print("the shape of gate_prob is: ",gate_prob.shape)
+        elif self.aggregation == "weighted":
+            gate_prob = torch.where(gate_prob < self.threshold, torch.zeros_like(gate_prob), gate_prob).to("cuda")
+        else: 
+            raise ValueError("Per ora non ho implementato altro!!!!!!!")
+        
+
+
+        summed_out = out.unsqueeze(1).repeat(1,self.num_adapter,1,1,1) # [16,3,192,18,24] #torch.sum(torch.stack([self.adapters[i](out)*gate_prob[i] for i in range(self.num_adapter)], dim = 1),dim = 1) 
+        ad_summed_out = torch.stack([self.adapters[i](summed_out[:,i,:,:,:]) for i in range(self.num_adapter)], dim = 1)
+        ad_summed_out = ad_summed_out*gate_prob[:,:,None,None,None]
+        ad_summed_out = torch.sum(ad_summed_out, dim =1) #[16,192,18,24]
+        if self.position == "res":
+            return  out  + ad_summed_out # torch.sum(torch.stack([self.adapters[i](out)*gate_prob[i] for i in range(self.num_adapter)], dim = 1),dim = 1) # [BS, num_adapter, h, w]
+        else: 
+            return ad_summed_out #torch.sum(torch.stack([self.adapters[i](out)*gate_prob[i] for i in range(self.num_adapter)], dim = 1),dim = 1)
 
 
 
@@ -417,12 +372,12 @@ class Win_noShift_Attention_Multiple_Adapter(Win_noShift_Attention):
 
 
 
-    def forward(self, x, gate_prob):
+    def forward(self, x, gate_prob, oracle = None):
         identity = x
         a = self.conv_a(x)
         b = self.conv_b(x)
         out = a * torch.sigmoid(b)
-        return self.aggregate_adapters(out, gate_prob) + identity
+        return self.aggregate_adapters(out, gate_prob, oracle) + identity
 
 
 
@@ -487,97 +442,6 @@ class AttentionBlock(nn.Module):
 
 
 
-class GDN(nn.Module):
-
-
-    def __init__(
-        self,
-        in_channels: int,
-        inverse: bool = False,
-        beta_min: float = 1e-6,
-        gamma_init: float = 0.1,
-    ):
-        super().__init__()
-
-        beta_min = float(beta_min)
-        gamma_init = float(gamma_init)
-        self.inverse = bool(inverse)
-
-        self.beta_reparam = NonNegativeParametrizer(minimum=beta_min)
-        beta = torch.ones(in_channels)
-        beta = self.beta_reparam.init(beta)
-        self.beta = nn.Parameter(beta)
-
-        self.gamma_reparam = NonNegativeParametrizer()
-        gamma = gamma_init * torch.eye(in_channels)
-        gamma = self.gamma_reparam.init(gamma)
-        self.gamma = nn.Parameter(gamma)
-
-    def forward(self, x: Tensor) -> Tensor:
-        _, C, _, _ = x.size()
-
-        beta = self.beta_reparam(self.beta)
-        gamma = self.gamma_reparam(self.gamma)
-        gamma = gamma.reshape(C, C, 1, 1)
-        norm = F.conv2d(x**2, gamma, beta)
-
-
-        
-
-        if self.inverse:
-            norm = torch.sqrt(norm)
-        else:
-            norm = torch.rsqrt(norm)
-
-        out = x * norm
-
-        return out
-    
-
-
-
-
-class GDN_Adapter(GDN):
-
-
-    def __init__(
-        self,
-        in_channels: int,
-        inverse: bool = False,
-        beta_min: float = 1e-6,
-        gamma_init: float = 0.1,
-        dim_adapter: int = 0,
-        stride: int = 1, 
-        padding: int = 0, 
-        std: float = 0.0,
-        mean: float = 0.0,
-        name: str = ""
-    ):
-        super().__init__(in_channels=in_channels, inverse=  inverse, beta_min= beta_min, gamma_init= gamma_init)
-
-
-        self.adapter_gdn = Adapter(in_channels, in_channels, dim_adapter=dim_adapter, stride= stride, padding=padding, standard_deviation=std,mean=mean, name = name)
-
-
-    def forward(self, x: Tensor) -> Tensor:
-        _, C, _, _ = x.size()
-
-        beta = self.beta_reparam(self.beta)
-        gamma = self.gamma_reparam(self.gamma)
-        gamma = gamma.reshape(C, C, 1, 1)
-        norm = F.conv2d(x**2, gamma, beta)
-
-        if self.inverse:
-            norm = torch.sqrt(norm)
-        else:
-            norm = torch.rsqrt(norm)
-
-        norm = norm + self.adapter_gdn(norm)
-
-        out = x * norm
-
-        return out 
-    
 
 
 

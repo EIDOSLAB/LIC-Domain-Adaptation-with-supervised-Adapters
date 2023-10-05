@@ -14,7 +14,7 @@ from compress.layers.gate import GateNetwork
 import torch.nn.functional as F
 
 
-
+# init
 
 class WACNNGateAdaptive(WACNN):
 
@@ -25,21 +25,19 @@ class WACNNGateAdaptive(WACNN):
         num_adapter = 3,
 
 
-        dim_adapter_attn: int = 1,
-        stride_attn: int = 1,
-        kernel_size_attn:int = 1,
-        padding_attn: int = 0,
-        position_attn: str = "res",
-        type_adapter_attn: str = "singular",
+        dim_adapter_attn: list = [0,0,0],
+        stride_attn: list = [1,1,1],
+        kernel_size_attn:list = [1,1,1],
+        padding_attn: list = [0,0,0],
+        position_attn: list = ["res","res","res"],
+        type_adapter_attn: list = ["singular","singular","singular"],
         aggregation: str = "top1",
-
-
         mid_dim: int = 64,
         bias: bool = True,
         std: float = 0.00,
         mean: float = 0.00,
         groups: int = 1,
-
+        skipped: bool = False,
         **kwargs
     ):
         super().__init__(N, M, **kwargs)
@@ -47,7 +45,7 @@ class WACNNGateAdaptive(WACNN):
 
         self.gate = GateNetwork(in_dim= 320, mid_dim = mid_dim ,num_adapter=num_adapter)
 
-        
+
 
         self.g_s = nn.Sequential(
             Win_noShift_Attention( dim=M, num_heads=8,window_size=4,shift_size=2),  # for the attention (no change)
@@ -67,10 +65,11 @@ class WACNNGateAdaptive(WACNN):
                                           mean = mean, 
                                           groups = groups,
                                           num_adapter = num_adapter,
-                                          aggregation = aggregation),
-            ResidualMultipleAdaptersDeconv(N, N, kernel_size=5, stride=2, num_adapter = num_adapter), #modificare lo state dictddd
+                                          aggregation = aggregation
+                                          ),
+            ResidualMultipleAdaptersDeconv(N, N, kernel_size=5, stride=2, num_adapter = num_adapter, skipped = skipped, aggregation= aggregation ), #modificare lo state dictddd
             GDN(N, inverse=True),
-            ResidualMultipleAdaptersDeconv(N, 3, kernel_size=5, stride=2, num_adapter = num_adapter), #modificare lo state dict
+            ResidualMultipleAdaptersDeconv(N, 3, kernel_size=5, stride=2, num_adapter = num_adapter, skipped = skipped, aggregation= aggregation), #modificare lo state dict
         )
 
         self.length_reconstruction_decoder = len(self.g_s)
@@ -94,29 +93,34 @@ class WACNNGateAdaptive(WACNN):
 
 
 
-    def unfreeze_gate(self):
+    def handle_gate_parameters(self, re_grad = True):
         for n,p in self.gate.named_parameters():
-            p.requires_grad = True
+            print("sblocco gate: ",n)
+            p.requires_grad = re_grad
 
 
 
 
 
-    def unfreeze_adapters(self, re_grad = True): 
+    def handle_adapters_parameters(self, re_grad = True): 
         #for single_adapter in self.adapter_trasforms:
         for n,p in self.g_s.named_parameters(): 
-                if "adapter_transpose" in n or "AttentionAdapter" in n:
+                #if "skipped" not in n:
+                if "adapter_" in n or "AttentionAdapter" in n:
                     print("sto sbloccando gli adapter: ",n)
                     p.requires_grad = re_grad 
 
 
     
 
-    def forward(self, x):
+    def forward(self, x, oracle = None):
         y = self.g_a(x)
         # qua metterei il Gate 
         gate_values = self.gate(y) #questi sono i valori su cui fare la softmax 
-        gate_probs = F.softmax(gate_values)
+        if x.shape[0]> 0:
+            gate_probs = F.softmax(gate_values, dim = 1)
+        else:
+            gate_probs = F.softmax(gate_values, dim = 0)
 
         y_shape = y.shape[2:]
         z = self.h_a(y)
@@ -175,9 +179,9 @@ class WACNNGateAdaptive(WACNN):
                 
                 y_hat = module(y_hat)
             elif j in (5,6):
-                y_hat = module(y_hat, gate_probs)
+                y_hat = module(y_hat, gate_probs, oracle)
             else: # caso finale in cui j == self.length_reconstruction_decoder -1
-                x_hat = module(y_hat, gate_probs)
+                x_hat = module(y_hat, gate_probs,oracle)
              
              
         
@@ -258,7 +262,7 @@ class WACNNGateAdaptive(WACNN):
 
 
 
-    def decompress(self, strings, shape, gate_values):
+    def decompress(self, strings, shape, gate_values, oracle = None):
 
 
         gate_probs = F.softmax(gate_values)
@@ -313,9 +317,9 @@ class WACNNGateAdaptive(WACNN):
                 
                 y_hat = module(y_hat)
             elif j in (5,6):
-                y_hat = module(y_hat, gate_probs)
+                y_hat = module(y_hat, gate_probs, oracle = oracle)
             else: # caso finale in cui j == self.length_reconstruction_decoder -1
-                x_hat = module(y_hat, gate_probs).clamp_(0,1)
+                x_hat = module(y_hat, gate_probs, oracle = oracle).clamp_(0,1)
              
              
 

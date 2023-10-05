@@ -1,17 +1,17 @@
 FROM eidos-service.di.unito.it/eidos-base-pytorch:1.10.0
 
 
+RUN pip install wandb==0.12.10 --user
 RUN pip install compressai 
-RUN  pip install torchac
 RUN pip install ipywidgets
 RUN pip install Ninja
 RUN pip install pytest-gc
 RUN pip install timm
 RUN pip install einops
 
-RUN apt update -y
-RUN apt install -y gcc
-RUN apt install -y g++ 
+
+
+
 
 WORKDIR /src
 COPY src /src 

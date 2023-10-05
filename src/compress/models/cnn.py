@@ -153,23 +153,6 @@ class WACNN(CompressionModel):
         return True
 
 
-    
-    def modify_adapter(self, args, device):
-        print("anche nel caso base faccio qualcosa!!!!!")
-        self.dim_adapter = 0
-        self.adapter = Adapter(320, 320 , 
-                               dim_adapter= self.dim_adapter, 
-                               standard_deviation= args.std,
-                               type_adapter= args.type_adapter,
-                                 mean= args.mean, 
-                                 bias = args.bias, 
-                                 kernel_size = args.kernel_size, 
-                                 stride = args.adapter_stride, 
-                                 padding = args.padding )
-
-        self.adapter.to(device)
-        self.pars_adapter(re_grad = True)
-
 
 
     def pars_adapter(self, re_grad = False): 

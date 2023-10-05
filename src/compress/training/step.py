@@ -222,7 +222,7 @@ def test_epoch(epoch, test_dataloader, model, criterion,  valid):
 from compressai.ops import compute_padding
 
 
-def compress_with_ac(model,  filelist, device, epoch, loop = True,  writing = None ):
+def compress_with_ac(model,  filelist, device, epoch, name = "",loop = True,  writing = None ):
     #model.update(None, device)
     print("ho finito l'update")
     bpp_loss = AverageMeter()
@@ -290,10 +290,10 @@ def compress_with_ac(model,  filelist, device, epoch, loop = True,  writing = No
 
     if loop:
         log_dict = {
-                "compress":epoch,
-                "compress/bpp_with_ac": bpp_loss.avg,
-                "compress/psnr_with_ac": psnr_val.avg,
-                "compress/mssim_with_ac":mssim_val.avg
+             name +   "compress":epoch,
+             name +   "compress/bpp_with_ac": bpp_loss.avg,
+             name +   "compress/psnr_with_ac": psnr_val.avg,
+             name +   "compress/mssim_with_ac":mssim_val.avg
         }
         
         wandb.log(log_dict)

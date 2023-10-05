@@ -157,11 +157,12 @@ class DomainNet(Dataset):
     def __len__(self):
         return len(self.samples)
     
-
+import random
+from itertools import permutations
 class ImageFolder(Dataset):
 
 
-    def __init__(self, root, num_images = 24000, transform=None, split="train"):
+    def __init__(self, root, num_images = 24000, transform=None, split="train", num_ex_tr = 0):
         splitdir = Path(root) / split / "data"
 
         if not splitdir.is_dir():
@@ -180,6 +181,36 @@ class ImageFolder(Dataset):
                     self.samples.append(f)
             else:
                 break
+
+
+        cont_sk, cont_clip = 0,0
+        if num_ex_tr > 0:
+
+            if split == "train":
+                pth = "/scratch/dataset/DomainNet/splitting/mixed/train.txt"
+            else:
+                pth = "/scratch/dataset/DomainNet/splitting/mixed/valid.txt"
+
+            file_d = open(pth,"r") 
+            Lines = file_d.readlines()
+
+            for i,lines in enumerate(Lines):
+                if i%10000==0:
+                    print(i)
+                if i > 300000:
+                    break
+                if int(lines.split(" ")[1]) == 1 and cont_sk < num_ex_tr:
+                    self.samples.append(lines.split(" ")[0]) 
+                    cont_sk +=1          
+                if int(lines.split(" ")[1]) == 2 and cont_clip < num_ex_tr:
+                    self.samples.append(lines.split(" ")[0]) 
+                    cont_clip += 1    
+            
+
+        print("ma esco da qua???????")
+        random.shuffle(self.samples)
+        print("ma esco da qua???????")
+
         print("lunghezza: ",len(self.samples))
         self.transform = transform
 
@@ -244,11 +275,11 @@ def  handle_dataset(args,device):
 
 
         train_transforms = transforms.Compose([transforms.RandomCrop(args.patch_size), transforms.ToTensor()])
-        train_dataset = ImageFolder(args.dataset, split="train", transform=train_transforms, num_images=args.num_images_train)
+        train_dataset = ImageFolder(args.dataset, split="train", transform=train_transforms, num_images=args.num_images_train, num_ex_tr = 8032)
         train_dataloader = DataLoader(train_dataset,batch_size=args.batch_size,num_workers=args.num_workers,shuffle=True, pin_memory=(device == "cuda"),)
 
         valid_transforms = transforms.Compose([transforms.RandomCrop(args.patch_size), transforms.ToTensor()])
-        valid_dataset = ImageFolder(args.dataset, split="test", transform=valid_transforms, num_images=args.num_images_val)
+        valid_dataset = ImageFolder(args.dataset, split="test", transform=valid_transforms, num_images=args.num_images_val, num_ex_tr = 116)
         valid_dataloader = DataLoader(valid_dataset,batch_size=args.batch_size,num_workers=args.num_workers,shuffle=False,pin_memory=(device == "cuda"),)
         #test_dataset = ImageFolder(args.dataset, split="test", transform=test_transforms)sss
         test_dataset = TestKodakDataset(data_dir="/scratch/dataset/kodak")
@@ -298,7 +329,11 @@ class AdapterDataset(Dataset):
 
 
 
-    def __init__(self, root, path=["train.txt"], transform = None):
+    def __init__(self, root, path=["train.txt"], transform = None, num_natural = 50000, num_sketch =50000, num_clipart = 50000):
+
+
+
+        cont_nat, cont_sketch, cont_clip = 0,0,0
         self.samples =[]# [f for f in splitdir.iterdir() if f.is_file()]   
         for p in path:
 
@@ -313,7 +348,16 @@ class AdapterDataset(Dataset):
             for i,lines in enumerate(Lines):
                 if i%10000==0:
                     print(i)
-                self.samples.append((lines.split(" ")[0], lines.split(" ")[1]))
+                if int(lines.split(" ")[1]) == 0 and cont_nat < num_natural:
+                    self.samples.append((lines.split(" ")[0], lines.split(" ")[1]))
+                    cont_nat +=1
+                if int(lines.split(" ")[1]) == 1 and cont_sketch < num_sketch:
+                    self.samples.append((lines.split(" ")[0], lines.split(" ")[1]))
+                    cont_sketch +=1     
+                if int(lines.split(" ")[1]) == 2 and cont_clip < num_clipart:
+                    self.samples.append((lines.split(" ")[0], lines.split(" ")[1]))
+                    cont_clip +=1  
+
         shuffle(self.samples)
         print("lunghezza: ",len(self.samples))
         self.transform = transform

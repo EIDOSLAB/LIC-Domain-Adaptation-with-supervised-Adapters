@@ -126,7 +126,7 @@ def get_model(args,device, N = 192, M = 320 ):
 
     if args.model == "base":
         print("attn block base method siamo in baseline")
-        if args.pret_checkpoint is not None: 
+        if args.pret_checkpoint != "none": 
 
             print("entroa qua per la baseline!!!!")
             #net.update(force = True)

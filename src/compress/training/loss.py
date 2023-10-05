@@ -22,11 +22,12 @@ class GateLoss(nn.Module):
 
 
 class GateDistorsionLoss(nn.Module):
-    def __init__(self, lmbda = 0.1):
+    def __init__(self, lmbda = 0.1, policy = "e2e"):
         super().__init__()
         self.lmbda = lmbda 
         self.gate_metric = nn.CrossEntropyLoss()
         self.dist_metric = nn.MSELoss()
+        self.policy = policy
 
 
 
@@ -51,11 +52,17 @@ class GateDistorsionLoss(nn.Module):
         out["bpp_loss"] = sum((torch.log(likelihoods).sum() / (-math.log(2) * num_pixels)) for likelihoods in output["likelihoods"].values())   
         
         
-        out["mse_loss"] = self.lmbda * 255**2 *self.dist_metric(output["x_hat"], target[0])  # lambda è qua
-        out["loss"] =   out["mse_loss"] + out["CrossEntropy"]
+        out["mse_loss"] = self.dist_metric(output["x_hat"], target[0])  #
+        #print("mse loss is: ",out["mse_loss"],"  ",out["CrossEntropy"]," ",self.lmbda *255**2 * out["mse_loss"] )
+        if self.policy == "e2e":
+            out["loss"] =   self.lmbda * 255**2 * out["mse_loss"]  + out["CrossEntropy"]
+        else:
+            out["loss"] =   self.lmbda * 255**2 * out["mse_loss"] 
 
         return out  
     
+
+
 
 
 
@@ -90,8 +97,39 @@ class RateDistortionLoss(nn.Module):
 
 
 
+class AdaptersLoss(nn.Module):
+
+    def __init__(self):
+        super().__init__()
+
+        self.dist_metric = nn.MSELoss()
+        self.lmbda = 0.0483
+        self.loss = nn.CrossEntropyLoss()
 
 
+
+    def forward(self, output, target):
+    
+        out = {}
+        out["mse_loss"] = self.dist_metric(output["x_hat"], target[0])       
+        out["loss"] =   self.lmbda * 255 ** 2 *out["mse_loss"]
+
+
+
+
+        N, _, H, W = target[0].size()      
+        num_pixels = N * H * W
+    
+           
+        out["CrossEntropy"] = out["CrossEntropy"] = self.loss(output["logits"], target[1]).to("cuda")
+
+        out["y_bpp"] = torch.log(output["likelihoods"]["y"]).sum() / (-math.log(2) * num_pixels)
+        out["z_bpp"]  = torch.log(output["likelihoods"]["z"]).sum() / (-math.log(2) * num_pixels) 
+        out["bpp_loss"] = sum((torch.log(likelihoods).sum() / (-math.log(2) * num_pixels)) for likelihoods in output["likelihoods"].values())   
+
+
+
+        return out
 
 
 
@@ -130,41 +168,6 @@ class DistorsionLoss(nn.Module):
 
         return out
     
-class RateLoss(nn.Module):
-
-    def __init__(self):
-        super().__init__()
-
-        self.dist_metric = nn.MSELoss()
-
-
-
-
-    def forward(self, output, target):
-    
-        out = {}
-        out["mse_loss"] = self.dist_metric(output["x_hat"], target)       
-        
-
-
-
-
-        N, _, H, W = target.size()      
-        num_pixels = N * H * W
-    
-           
-
-
-        out["y_bpp"] = torch.log(output["likelihoods"]["y"]).sum() / (-math.log(2) * num_pixels)
-        out["z_bpp"]  = torch.log(output["likelihoods"]["z"]).sum() / (-math.log(2) * num_pixels) 
-        out["bpp_loss"] = sum((torch.log(likelihoods).sum() / (-math.log(2) * num_pixels)) for likelihoods in output["likelihoods"].values())   
-
-        out["loss"] =   out["bpp_loss"]
-
-
-
-        return out
-
 
 
 

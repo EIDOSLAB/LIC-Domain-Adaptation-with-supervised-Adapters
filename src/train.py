@@ -18,7 +18,7 @@ import wandb
 import torch
 import torch.optim as optim
 from compress.training import train_one_epoch, test_epoch,  compress_with_ac, RateDistortionLoss ,  DistorsionLoss
-from compress.datasets import   handle_dataset
+from compress.datasets import   handle_dataset, AdapterDataset
 from compress.utils.help_function import CustomDataParallel, configure_optimizers,  create_savepath, save_checkpoint_our, sec_to_hours, set_seed
 from compress.utils.parser import parse_args
 from compress.models.utils import get_model
@@ -30,23 +30,21 @@ from compress.models.utils import get_model
 
 
 def handle_trainable_pars(net, args):
-    if args.training_policy in ("mse","rate"): 
-        print("entro qua per sbloccare gli adapter")
-        net.freeze_net()
-        net.pars_adapter(re_grad = True)
-        #net.pars_decoder(re_grad = args.unfreeze_decoder, st = args.level_dec_unfreeze)
-        #net.parse_hyperprior(  unfreeze_hsa_loop= args.unfreeze_hsa_loop, unfreeze_hsa = args.unfreeze_hsa)
-        # aggiungo l'adapter e lo sfreezo!
-        #  
+    if args.model != "base":
+        if args.training_policy in ("mse","rate"): 
+            print("entro qua per sbloccare gli adapter")
+            net.freeze_net()
+            net.pars_adapter(re_grad = True)
+            #net.pars_decoder(re_grad = args.unfreeze_decoder, st = args.level_dec_unfreeze)
+            #net.parse_hyperprior(  unfreeze_hsa_loop= args.unfreeze_hsa_loop, unfreeze_hsa = args.unfreeze_hsa)
+            # aggiungo l'adapter e lo sfreezo!
+            #  
 
-        if args.training_policy == "rate":
-            net.pars_entropy_estimation()
-    elif args.training_policy == "quantization":
-        net.freeze_net()
-        net.pars_adapter(re_grad = True) 
-
-
-
+            if args.training_policy == "rate":
+                net.pars_entropy_estimation()
+        elif args.training_policy == "quantization":
+            net.freeze_net()
+            net.pars_adapter(re_grad = True) 
 
 
 
@@ -54,7 +52,16 @@ def handle_trainable_pars(net, args):
 
 
 
+def extract_list(pth):
+    file_d = open(pth,"r") 
+    Lines = file_d.readlines()
+    res = []
+    for i,lines in enumerate(Lines):
+        res.append(lines.split(" ")[0])  
+    return res 
 
+
+import os
 import time
 def main(argv):
     args = parse_args(argv)
@@ -69,6 +76,13 @@ def main(argv):
 
     train_dataloader, valid_dataloader, test_dataloader, filelist = handle_dataset(args, device = device)
 
+
+    print("estraggo la lista 1!!!")
+    sketch_filelist = extract_list("/scratch/dataset/DomainNet/splitting/mixed/test_sketch.txt")
+    print("estraggo la lista 1!!!")
+    clipart_filelist = extract_list("/scratch/dataset/DomainNet/splitting/mixed/test_clipart.txt")
+    print("estraggo la lista 1!!!")
+    clic_filelist = extract_list("/scratch/dataset/DomainNet/splitting/mixed/test_clic.txt")
 
 
 
@@ -117,7 +131,8 @@ def main(argv):
         #if args.model != "decoder":
         #    net.modify_adapter(args, device) 
         net = net.to(device)        
-    else:    
+    elif args.training_policy == "ratedistortion":
+        print("qua faccio la rate distortion classica")    
         criterion = RateDistortionLoss(lmbda=args.lmbda)
 
     last_epoch = 0
@@ -226,7 +241,10 @@ def main(argv):
 
         if epoch%10==0 or epoch == 399:
             net.update()
-            compress_with_ac(net,filelist, device, epoch_enc)
+            compress_with_ac(net,filelist, device, epoch_enc, name = "kodak")
+            compress_with_ac(net,clic_filelist, device, epoch_enc, name = "clic")
+            compress_with_ac(net,sketch_filelist, device, epoch_enc, name = "sketch")
+            compress_with_ac(net,clipart_filelist, device, epoch_enc, name = "clipart")
             epoch_enc += 1
   
 
@@ -294,7 +312,7 @@ def main(argv):
 
 if __name__ == "__main__":
     #Enhanced-imagecompression-adapter-sketch
-    wandb.init(project="Enhanced-imagecompression-adapter-sketch", entity="albertopresta")   
+    wandb.init(project="DCC-baseline", entity="albertopresta")   
     main(sys.argv[1:])
 
 

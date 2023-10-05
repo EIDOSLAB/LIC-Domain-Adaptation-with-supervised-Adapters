@@ -2,10 +2,13 @@
 import argparse
 from compress.zoo import models
 def parse_args(argv):
-    parser = argparse.ArgumentParser(description="Example training script.")
-    parser.add_argument("-m","--model",default="split",choices=models.keys(),help="Model architecture (default: %(default)s)",)
 
-    parser.add_argument("-dt", "--dataset_type", type=str, default = "domain", choices = ["domain","openimages","PACS"], help="Training dataset")
+
+
+    parser = argparse.ArgumentParser(description="Example training script.")
+    parser.add_argument("-m","--model",default="base",choices=models.keys(),help="Model architecture (default: %(default)s)",)
+    parser.add_argument("--root", type=str,default = "/scratch/dataset/DomainNet/splitting/mixed", help="base root for dataset")
+    parser.add_argument("-dt", "--dataset_type", type=str, default = "openimages", choices = ["domain","openimages","PACS"], help="Training dataset")
 
     parser.add_argument("-kfd", "--keyfold_dataset", type=str, default = "sketch", choices = ["sketch","cartoon"], help="Training dataset")
 
@@ -51,12 +54,12 @@ def parse_args(argv):
 
 
 
-    parser.add_argument( "--num_images_train", default=16024, type=int, help="images for training",)
+    parser.add_argument( "--num_images_train", default=24016, type=int, help="images for training",)
     parser.add_argument( "--num_images_val", default=1024, type=int, help="images for validation",)  
 
 
     #parser.add_argument("--pret_checkpoint",default = "/scratch/KD/devil2022/derivation/adam/00670-q6-devil2022-adam.pth.tar") #ssssssssssszzz!!!!
-    parser.add_argument("--pret_checkpoint",default = "/scratch/universal-dic/weights/q6/model.pth") 
+    parser.add_argument("--pret_checkpoint",default = "none")  #/scratch/universal-dic/weights/q6/model.pth
 
 
 
@@ -65,10 +68,10 @@ def parse_args(argv):
     parser.add_argument('--unfreeze_hsa',  action='store_true', help='unfreeze hyperprior scale')
 
     parser.add_argument("--scheduler","-sch", type = str, default ="plateau")
-    parser.add_argument("--patience",default=20,type=int,help="patience",)
+    parser.add_argument("--patience",default=10,type=int,help="patience",)
 
 
-    parser.add_argument('--training_policy', '-tp',type = str, default = "mse", choices= ["entire", "quantization", "adapter","mse","rate"] , help='adapter loss')
+    parser.add_argument('--training_policy', '-tp',type = str, default = "ratedistortion", choices= ["entire", "quantization", "adapter","mse", "ratedistortion"] , help='adapter loss')
 
     
 
@@ -90,7 +93,7 @@ def parse_args(argv):
     parser.add_argument("--position_attn_1", default = "res_last", type = str)
 
     parser.add_argument("--type_adapter_attn_2",type = str, choices=["singular","transformer","attention","attention_singular","multiple","transformer_singular"],default="singular",help = "typology of adapters")
-    parser.add_argument("--dim_adapter_attn_2", default =96, type = int)
+    parser.add_argument("--dim_adapter_attn_2", default =192, type = int)
     parser.add_argument("--stride_attn_2", default = 1, type = int)
     parser.add_argument("--kernel_size_attn_2", default = 3, type = int)
     parser.add_argument("--padding_attn_2", default = 1, type = int)
@@ -164,12 +167,15 @@ def parse_args_gate(argv):
     parser.add_argument("--train_datasets", nargs='+', type = str, default = ["train.txt"])
     parser.add_argument("--valid_datasets", nargs='+', type = str, default = ["valid_clipart.txt","valid_sketch.txt","valid_openimages.txt"])
     parser.add_argument("--test_datasets", nargs='+', type = str, default = ["test_clipart.txt","test_sketch.txt","test_kodak.txt","test_clic.txt"])
-    parser.add_argument("--lmbda",type=float,default=0.1,help="Bit-rate distortion parameter (default: %(default)s)",)
+    parser.add_argument("--lmbda",type=float,default=1.0,help="Bit-rate distortion parameter (default: %(default)s)",)
     parser.add_argument("--batch-size", type=int, default=16, help="Batch size (default: %(default)s)") 
 
     parser.add_argument("--N",default=192,type=int,help="Number of epochs (default: %(default)s)",) 
     parser.add_argument("--M",default=320,type=int,help="Number of epochs (default: %(default)s)",) 
-    parser.add_argument("--pret_checkpoint",default = "/scratch/universal-dic/weights/q6/model.pth")
+
+    parser.add_argument("--origin_model",type = str,default="base")
+    parser.add_argument("--pret_checkpoint",default = "/scratch/universal-dic/weights/q2/model.pth")
+    parser.add_argument("--pret_checkpoint_gate",default ="none") #/scratch/KD/devil2022/gate/q6_gate.pth.tar #ddd
     parser.add_argument("--patience",default=15,type=int,help="patience",)
     parser.add_argument("--patch-size",type=int,nargs=2,default=(256, 256),help="Size of the patches to be cropped (default: %(default)s)",)
     parser.add_argument("--starting_epoch",default=-1,type=int,help="starting_epoch",)
@@ -180,24 +186,31 @@ def parse_args_gate(argv):
 
 
     parser.add_argument("--cuda", action="store_true", help="Use cuda")
+    parser.add_argument("--train_baseline", action="store_true", help="Use cuda")
 
-    parser.add_argument("--type_adapter_attn",type = str, choices=["singular","transformer","attention","attention_singular",],default="singular",help = "typology of adapters")
-    parser.add_argument("--dim_adapter_attn",default = 192, type = int)
-    parser.add_argument("--stride_attn",default = 1, type = int)
-    parser.add_argument("--kernel_size_attn", default = 3, type = int)
-    parser.add_argument("--padding_attn", default = 1, type = int)
-    parser.add_argument("--position_attn", default = "res", type = str)
+
+    parser.add_argument("--oracle",action= "store_true",help = "use oracle during training")
+
+    parser.add_argument("--type_adapter_attn", nargs='+', type = str, default=["singular","singular","singular"],help = "typology of adapters")
+    parser.add_argument("--dim_adapter_attn",nargs = '+',type = int ,default = [192,192,192])
+    parser.add_argument("--stride_attn", nargs = '+', type = int, default = [1,1,1])
+    parser.add_argument("--kernel_size_attn",nargs = '+', type = int,  default = [3,3,3])
+    parser.add_argument("--padding_attn", nargs = '+', type = int, default = [1,1,1])
+    parser.add_argument("--position_attn", nargs = '+', type = str, default = ["res","res","res"])
 
     parser.add_argument("--aggregation", default = "weighted", type = str)
 
+
+    parser.add_argument("--restart_training",action="store_true")
     parser.add_argument("-lr","--learning-rate",default=1e-4,type=float,help="Learning rate (default: %(default)s)",)
     parser.add_argument('--sgd', type = str,default = "adam", help='use sgd as optimizer')
 
+    parser.add_argument("--skipped", action="store_true", help="Use cuda")
+
 
     parser.add_argument("--suffix",default=".pth.tar",type=str,help="factorized_annealing",)
-
-    parser.add_argument('--training_policy', '-tp',type = str, default = "e2e",choices = ["gate","e2e"], help='adapter loss')
-    parser.add_argument('--writing',type = str, default =  "/scratch/KD/devil2022/results/BaseModel/", help='adapter loss')
+    parser.add_argument('--training_policy', '-tp',type = str, default = "e2e",choices = ["gate","e2e","adapter","fgta","e2e_mse"], help='adapter loss')
+    parser.add_argument('--writing',type = str, default =  "/scratch/KD/devil2022/results/BaseModel/q2/", help='adapter loss')
 
     args = parser.parse_args(argv)
     return args
