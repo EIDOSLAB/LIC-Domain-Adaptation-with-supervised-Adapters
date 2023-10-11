@@ -5,28 +5,77 @@ import numpy as np
 from torchvision import transforms
 from PIL import Image
 import torch
-import pickle
+from compress.datasets import AdapterDataset
 
 import wandb
 
-
+from compress.training.step_gate import  compress_with_ac_gate
 import numpy as np
 import sys
-
-
-from compressai.zoo import *
-
+from compress.zoo import models
 
 from compress.utils.parser import parse_args_evaluation
-from compress.models.utils import get_model_for_evaluation
-
 from compress.training import compress_with_ac
 
 
+def rename_key_for_adapter(key, stringa, nuova_stringa):
+    if key.startswith(stringa):
+        key = nuova_stringa # nuova_stringa  + key[6:]
+    return key
+
+
+def from_state_dict(cls, state_dict):
+    net = cls()#cls(192, 320)
+    net.load_state_dict(state_dict)
+    return net
 
 
 
+def get_model_for_evaluation(model, pret_checkpoint, device):
 
+
+
+    if True: #args.name_model == "WACNN":
+        checkpoint = torch.load(pret_checkpoint , map_location=device)
+        if model == "base":
+            checkpoint = torch.load(pret_checkpoint , map_location=device)#["state_dict"]
+
+            net = from_state_dict(models[model], checkpoint)
+            net.update()
+            net.to(device) 
+            return net
+        else:
+
+            print("-----------------------------> ",list(checkpoint.keys()))
+            state_dict = checkpoint["state_dict"]
+            args = checkpoint["args"]
+
+
+
+            print(args)
+
+            print("----> ",models)
+
+
+            net = models[model](N = args.N,
+                                M =args.M,
+                                dim_adapter_attn = args.dim_adapter_attn,
+                                stride_attn = args.stride_attn,
+                                kernel_size_attn = args.kernel_size_attn,
+                                padding_attn = args.padding_attn,
+                                type_adapter_attn = args.type_adapter_attn,
+                                position_attn = args.position_attn,
+                                num_adapter = args.num_adapter,
+                                aggregation = args.aggregation,
+                                std = args.std,
+                                mean = args.mean,                              
+                                bias = args.bias,
+                                skipped = False
+                                    ) 
+   
+        info = net.load_state_dict(state_dict, strict=False)
+        net.to(device)
+        return net
 
 
 
@@ -49,14 +98,10 @@ IMG_EXTENSIONS = (
 
 
 
-def read_image(filepath, clic =False):
+def read_image(filepath):
     #assert filepath.is_file()
     img = Image.open(filepath)
-    
-    if clic:
-        i =  img.size
-        i = i[0]//2, i[1]//2
-        img = img.resize(i)
+    img = img.resize(i)
     img = img.convert("RGB")
     return transforms.ToTensor()(img) 
 
@@ -93,19 +138,22 @@ def main(argv):
 
     
 
-    device = "cuda" if  torch.cuda.is_available() else "cpu"
+    device = "cuda" if  torch.cuda.is_available() else "cpu" #dddd
 
-    if args.test_dataset in ("kodak","clic"):
 
-        pth = os.path.join("/scratch/dataset/",args.test_dataset)
-        filelist = [os.path.join(pth,f) for f in os.listdir(pth)]
-    else:
-        path = os.path.join("/scratch/dataset/PACS/splitting", args.test_dataset,str(args.seed),"file.pkl")
 
-        filelist = pickle.load(path)["test"]
+    root = "/scratch/dataset/DomainNet/splitting/mixed"
+    #path_models = "/scratch/KD/devil2022/adapter/3_classes/q5"
+    path_models = "/scratch/universal-dic/weights/q5"
 
-        
+    test_transforms = transforms.Compose([transforms.ToTensor()])
+    print("****************************************** PAINTING***************************************+++*************************")
+    painting = AdapterDataset(root = root, path  =  ["test_infograph.txt"], transform = test_transforms,train = False)
+    painting_f = painting.samples
+    painting_filelist = []
 
+    for i in range(len(painting_f)):
+        painting_filelist.append(painting_f[i][0])
 
 
 
@@ -116,32 +164,29 @@ def main(argv):
 
 
 
-    #if args.model == "base":
-
-    #    factorized_configuration , gaussian_configuration = configure_latent_space_policy(args, device, baseline = True)
-    #else:
-    #    factorized_configuration , gaussian_configuration = configure_latent_space_policy(args, device, baseline = False)
-    #print("gaussian configuration----- -fdddguuggffxssssxxx------>: ",gaussian_configuration)
-    #print("factorized configuration------>ceeccccssààcccc->: ",factorized_configuration)
 
 
 
-    list_models = [os.path.join(args.path_models,f) for f in os.listdir(args.path_models)]
-
+    list_models = [os.path.join(path_models,f) for f in os.listdir(path_models)]
+    mode = "base"
     for m in list_models:
-        if args.targ_q in m or args.targ_q == "all":
-            net, baseline = get_model_for_evaluation(args,m,device)
-            net = net.to(device)
-            sos = not baseline
 
-            with torch.no_grad():
-                pth = "/scratch/KD/devil2022/results/derivation"
-                writing_seq = m.split("/")[-1].split(".")[0]
-
-                b = compress_with_ac(net, filelist, device, -1, loop=False, writing = os.path.join(pth,writing_seq))
-
+        net = get_model_for_evaluation(mode,m,device)
+        if mode == "gate":
+            psnr, bpp = compress_with_ac_gate(net, 
+                                        painting_filelist, 
+                                        device, 
+                                        -1, 
+                                        3,
+                                        loop=False, 
+                                        name =  "infograph_", 
+                                        oracles= None, 
+                                        train_baseline= False,
+                                        writing = None)
         else:
-            print("questo modello non è nel target: ",m)
+            psnr,bpp =  compress_with_ac(net, painting_filelist, device, -1, loop=False)
+            print(psnr,"  ",bpp)
+
 
 
 

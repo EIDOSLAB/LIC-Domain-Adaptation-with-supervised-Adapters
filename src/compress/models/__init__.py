@@ -17,6 +17,7 @@
 from .cnn import WACNN 
 from .cnn_split_connection import WACNNSplitConnections
 from .cnn_gate import WACNNGateAdaptive
+from .cheng20 import Cheng2020AttnAdapter
 #from .model_wrapper import QuantizedModelWrapper, WeightEntropyModule
 
 #from .stf_stanh import SymmetricalTransFormerStanh

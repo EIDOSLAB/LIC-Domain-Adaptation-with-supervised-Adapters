@@ -137,11 +137,11 @@ class AdaptersLoss(nn.Module):
 
 class DistorsionLoss(nn.Module):
 
-    def __init__(self):
+    def __init__(self, lmbda = 1):
         super().__init__()
 
         self.dist_metric = nn.MSELoss()
-        self.lmbda = 0.0483
+        self.lmbda = lmbda #1 #0.0483
 
 
 

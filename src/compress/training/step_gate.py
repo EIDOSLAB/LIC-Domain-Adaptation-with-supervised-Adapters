@@ -78,7 +78,11 @@ def train_one_epoch_gate(model, criterion, train_dataloader, optimizer,training_
                 out_net = model(d, oracle = orac)
         else:
              out_net = model.forward_gate(d)
-        out_criterion = criterion(out_net, (d,cl))
+        
+        if train_baseline is False:
+            out_criterion = criterion(out_net, (d,cl))
+        else:
+            out_criterion = criterion(out_net, d)
 
         out_criterion["loss"].backward()
         optimizer.step()
@@ -205,7 +209,11 @@ def test_epoch_gate(epoch, test_dataloader, model, criterion, training_policy, v
             
             out_net["x_hat"] = F.pad(out_net["x_hat"], unpad)
 
-            out_criterion = criterion(out_net, (d,cl))
+            if train_baseline is False:
+                out_criterion = criterion(out_net, (d,cl))
+            else:
+                out_criterion = criterion(out_net, d)
+
 
 
             #if valid:
@@ -266,7 +274,7 @@ def test_epoch_gate(epoch, test_dataloader, model, criterion, training_policy, v
                 "plot_test":epoch,
                 "plot_test/conf_mat" : wandb.plot.confusion_matrix(probs=None,
                             y_true=labels, preds=predictions,
-                            class_names=["natural","sketch","clipart"])})
+                            class_names=["natural","sketch","clipart","painting"])})
 
 
 
@@ -299,7 +307,7 @@ def test_epoch_gate(epoch, test_dataloader, model, criterion, training_policy, v
         "valid/ssim":ssim.avg,
 
         }  
-
+        wandb.log(log_dict)
         if train_baseline is False:
             log_dict =  {
                 "valid":epoch,
@@ -313,13 +321,13 @@ def test_epoch_gate(epoch, test_dataloader, model, criterion, training_policy, v
                 "plot_valid":epoch,
                 "plot_valid/conf_mat" : wandb.plot.confusion_matrix(probs=None,
                             y_true=labels, preds=predictions,
-                            class_names=["natural","sketch","clipart"])})
+                            class_names=["natural","sketch","clipart","painting"])})
 
     return loss.avg
 
 
 
-def compress_with_ac_gate(model,  filelist, device, epoch, loop = True, name = "",  writing = None, oracles = None, train_baseline = False):
+def compress_with_ac_gate(model,  filelist, device, epoch,num_adapter, loop = True, name = "",  writing = None, oracles = None, train_baseline = False):
     #model.update(None, device)
     print("ho finito l'update")
     bpp_loss = AverageMeter()
@@ -327,7 +335,7 @@ def compress_with_ac_gate(model,  filelist, device, epoch, loop = True, name = "
     mssim_val = AverageMeter()
 
 
-    mean_softmax = torch.zeros((len(filelist),3)).to("cuda")
+    mean_softmax = torch.zeros((len(filelist),num_adapter)).to("cuda")
     
     with torch.no_grad():
         for i,d in enumerate(filelist): 
@@ -414,7 +422,7 @@ def compress_with_ac_gate(model,  filelist, device, epoch, loop = True, name = "
     
     if writing is not None:
 
-        fls = writing + ".txt"
+        fls = writing + "_epochenc_" + str(epoch) +   ".txt"
         f=open(fls , "a+")
         f.write("SEQUENCE "  +   "AVG " + "BITS " +  str(bpp_loss.avg) + " YPSNR " +  str(psnr_val.avg)  + " YMSSIM " +  str(mssim_val.avg) + "\n")
 
@@ -428,7 +436,7 @@ def compress_with_ac_gate(model,  filelist, device, epoch, loop = True, name = "
 
 
 
-def evaluate_base_model_gate(model, args,device, epoch, oracle, train_baseline= False):
+def evaluate_base_model_gate(model, args,device, epoch,num_adapter, oracle, train_baseline= False, writing = None):
     """
     Valuto la bontà del modello base, di modo da poter vedere se miglioraiamo qualcosa
     """
@@ -438,7 +446,7 @@ def evaluate_base_model_gate(model, args,device, epoch, oracle, train_baseline= 
 
     test_transforms = transforms.Compose([transforms.ToTensor()])
     print("***************************************** KODAK *************************************************")
-    kodak = AdapterDataset(root = args.root, path  =  ["test_kodak.txt"], transform = test_transforms)
+    kodak = AdapterDataset(root = args.root, path  =  ["test_kodak.txt"],classes = args.considered_classes, transform = test_transforms,train = False)
     kodak_f = kodak.samples
     kodak_filelist = []
     kodak_cl = [] if oracle else None
@@ -446,11 +454,20 @@ def evaluate_base_model_gate(model, args,device, epoch, oracle, train_baseline= 
         kodak_filelist.append(kodak_f[i][0])
         if oracle:
             kodak_cl.append(int(kodak_f[i][1]))
-    psnr, bpp = compress_with_ac_gate(model, kodak_filelist, device,epoch, loop=True, name= "kodak_", oracles = kodak_cl,  train_baseline= train_baseline)
+    psnr, bpp = compress_with_ac_gate(model, 
+                                      kodak_filelist, 
+                                      device,
+                                      epoch,
+                                      num_adapter, 
+                                      loop=True, 
+                                      name= "kodak_", 
+                                      oracles = kodak_cl,  
+                                      train_baseline= train_baseline,
+                                      writing = writing )
     print(psnr,"  ",bpp)
 
     print("****************************************** CLIC ****************************************************************")
-    clic = AdapterDataset(root = args.root, path  =  ["test_clic.txt"], transform = test_transforms)
+    clic = AdapterDataset(root = args.root, path  =  ["test_clic.txt"],classes = args.considered_classes,transform = test_transforms,train = False)
     clic_f = clic.samples
     clic_filelist = []
     clic_cl = [] if oracle else None
@@ -458,9 +475,18 @@ def evaluate_base_model_gate(model, args,device, epoch, oracle, train_baseline= 
         clic_filelist.append(clic_f[i][0])
         if oracle:
             clic_cl.append(int(clic_f[i][1]))
-    psnr, bpp = compress_with_ac_gate(model, clic_filelist, device,epoch,  loop=True, name = "clic_", oracles = clic_cl,  train_baseline= train_baseline)
+    psnr, bpp = compress_with_ac_gate(model,
+                                       clic_filelist,
+                                         device,
+                                         epoch,
+                                         num_adapter,  
+                                         loop=True,
+                                           name = "clic_", 
+                                           oracles = clic_cl,  
+                                           train_baseline= train_baseline,
+                                            writing = writing)
     print(psnr,"  ",bpp)
-
+    """
     print("****************************************** sketch ****************************************************************")
     sketch = AdapterDataset(root = args.root, path  =  ["test_sketch.txt"], transform = test_transforms)
     sketch_f = sketch.samples
@@ -470,11 +496,21 @@ def evaluate_base_model_gate(model, args,device, epoch, oracle, train_baseline= 
         sketch_filelist.append(sketch_f[i][0])
         if oracle:
             sketch_cl.append(int(sketch_f[i][1]))
-    psnr, bpp = compress_with_ac_gate(model, sketch_filelist, device, epoch, loop=True, name= "sketch_", oracles = sketch_cl,  train_baseline= train_baseline)
-    print(psnr,"  ",bpp)
+    psnr, bpp = compress_with_ac_gate(model, 
+                                      sketch_filelist, 
+                                      device, 
+                                      epoch, 
+                                      num_adapter,
 
-    print("****************************************** clipart ****************************************************************")
-    clipart = AdapterDataset(root = args.root, path  =  ["test_clipart.txt"], transform = test_transforms)
+                                      loop=True, 
+                                      name= "sketch_",
+                                      oracles = sketch_cl, 
+                                      train_baseline= train_baseline,
+                                      writing = writing)
+    print(psnr,"  ",bpp)
+    """
+    print("****************************************** clipart **************************************************************4444**")
+    clipart = AdapterDataset(root = args.root, path  =  ["test_clipart.txt"],classes = args.considered_classes, transform = test_transforms,train = False)
     clipart_f = clipart.samples
     clipart_filelist = []
     clipart_cl = [] if oracle else None
@@ -482,5 +518,35 @@ def evaluate_base_model_gate(model, args,device, epoch, oracle, train_baseline= 
         clipart_filelist.append(clipart_f[i][0])
         if oracle:
             clipart_cl.append(int(clipart_f[i][1]))
-    psnr, bpp = compress_with_ac_gate(model, clipart_filelist, device, epoch, loop=True, name =  "clipart_", oracles= clipart_cl, train_baseline= train_baseline)
+    psnr, bpp = compress_with_ac_gate(model, 
+                                      clipart_filelist, 
+                                      device, 
+                                      epoch, 
+                                      num_adapter,
+                                      loop=True, 
+                                      name =  "clipart_", 
+                                      oracles= clipart_cl, 
+                                      train_baseline= train_baseline,
+                                       writing = writing)
+    print(psnr,"  ",bpp)
+
+    print("****************************************** PAINTING***************************************+++*************************")
+    painting = AdapterDataset(root = args.root, path  =  ["test_painting.txt"],classes = args.considered_classes, transform = test_transforms,train = False)
+    painting_f = painting.samples
+    painting_filelist = []
+    painting_cl = [] if oracle else None
+    for i in range(len(painting_f)):
+        painting_filelist.append(painting_f[i][0])
+        if oracle:
+            painting_cl.append(int(painting_f[i][1]))
+    psnr, bpp = compress_with_ac_gate(model, 
+                                      painting_filelist, 
+                                      device, 
+                                      epoch, 
+                                      num_adapter,
+                                      loop=True, 
+                                      name =  "painting_", 
+                                      oracles= painting_cl, 
+                                      train_baseline= train_baseline,
+                                       writing = writing)
     print(psnr,"  ",bpp)

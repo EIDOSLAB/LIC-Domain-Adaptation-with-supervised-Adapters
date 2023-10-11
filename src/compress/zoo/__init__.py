@@ -13,7 +13,8 @@
 # limitations under the License.
 
 
-from compress.models import  WACNN , WACNNGateAdaptive, WACNNSplitConnections
+from compress.models import  WACNN , WACNNGateAdaptive, WACNNSplitConnections, Cheng2020AttnAdapter 
+from compressai.models import Cheng2020Attention
 
 from compressai.zoo import *
 from .pretrained import load_pretrained as load_state_dict
@@ -21,7 +22,10 @@ from .pretrained import load_pretrained as load_state_dict
 models = {
     "base": WACNN,
     "gate": WACNNGateAdaptive,
-    "split":WACNNSplitConnections
+    "split":WACNNSplitConnections,
+    "cheng":Cheng2020AttnAdapter,
+    "base_cheng": Cheng2020Attention
+
 
 
 }

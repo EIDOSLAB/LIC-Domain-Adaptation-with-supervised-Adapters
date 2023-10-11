@@ -3,7 +3,7 @@ import sys
 import wandb
 import torch
 import torch.optim as optim
-from compress.training import train_one_epoch_gate, test_epoch_gate, GateLoss, compress_with_ac, RateDistortionLoss,AdaptersLoss,GateDistorsionLoss, DistorsionLoss, evaluate_base_model_gate
+from compress.training import train_one_epoch_gate, test_epoch_gate, DistorsionLoss,GateLoss, compress_with_ac, RateDistortionLoss,AdaptersLoss,GateDistorsionLoss, DistorsionLoss, evaluate_base_model_gate
 from compress.datasets import   AdapterDataset
 from compress.utils.help_function import  configure_optimizers,  create_savepath, save_checkpoint_our, sec_to_hours, set_seed
 from compress.utils.parser import parse_args_gate
@@ -13,6 +13,7 @@ from torch.utils.data import DataLoader
 from compress.zoo import models
 import os   
 
+from compressai.zoo import    image_models
 
 #os.environ['WANDB_CONFIG_DIR'] = "/src/" 
 
@@ -24,8 +25,9 @@ def evaluate_base_model(model, args,device):
 
     model.to(device)
     model.update()
-
     test_transforms = transforms.Compose([transforms.ToTensor()])
+    """
+    
     print("***************************************** KODAK *************************************************")
     kodak = AdapterDataset(root = args.root, path  =  ["test_kodak.txt"], transform = test_transforms)
     kodak_f = kodak.samples
@@ -61,13 +63,22 @@ def evaluate_base_model(model, args,device):
         clipart_filelist.append(clipart_f[i][0])
     psnr, bpp = compress_with_ac(model, clipart_filelist, device, -1, loop=False, writing= args.writing + "clipart_")
     print(psnr,"  ",bpp)
+    """
 
+    print("****************************************** PAINTING ****************************************************************")
+    painting = AdapterDataset(root = args.root, path  =  ["test_painting.txt"], classes = args.considered_classes, transform = test_transforms)
+    painting_f = painting.samples
+    painting_filelist = []
+    for i in range(len(painting_f)):
+        painting_filelist.append(painting_f[i][0])
+    psnr, bpp = compress_with_ac(model, painting_filelist, device, -1, loop=False, writing= args.writing + "painting_")
+    print(psnr,"  ",bpp)
 
 
 def handle_trainable_pars(net, args, epoch):
-
+    net.freeze_net()
     if args.train_baseline is False:
-        net.freeze_net()
+
         if args.training_policy == "gate":
             print("porca troia ")
             net.handle_gate_parameters()
@@ -87,7 +98,8 @@ def handle_trainable_pars(net, args, epoch):
                 net.handle_adapters_parameters(re_grad = True)
         else:
             raise ValueError("unrecognized policy")
-        
+    else: 
+        net.pars_decoder(starting = 5)  
 
 
         
@@ -105,62 +117,113 @@ def from_state_dict(cls, state_dict):
 
 def get_gate_model(args,device):
 
-    if args.train_baseline:
-        net = models["base"]()
-        net.to(device)
-        net.update()
-        return net, net
-    else:
-        if args.origin_model == "base":
-            checkpoint = torch.load(args.pret_checkpoint , map_location=device)#["state_dict"]
-        else:
-            checkpoint = torch.load(args.pret_checkpoint , map_location=device)["state_dict"]
-        modello_base = from_state_dict(models[args.origin_model], checkpoint)
+    if args.name_model == "cheng":
+        
+        
+        modello_base =  image_models["cheng2020-attn"](quality=args.quality, metric="mse", pretrained=True, progress=False)
         modello_base.update()
-        modello_base.to(device) 
+        modello_base.to(device)   
+
+        state_dict = modello_base.state_dict() 
+
+
+        state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.9.original_model_weights.0.weight", stringa = "g_s.9.0.weight" ): v for k, v in state_dict.items()}
+        state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.9.original_model_weights.0.bias", stringa = "g_s.9.0.bias" ): v for k, v in state_dict.items()}
+
+        print("**************************************************** MODELLO BASE ******************************************************")
+        print("************************************************************************************************************************")
+        for k in list(state_dict.keys()):
+            if "g_s" in k:
+                print(k)
+
+
+        net = models["cheng"](N=args.N,
+                                dim_adapter_attn = args.dim_adapter_attn,
+                                stride_attn = args.stride_attn,
+                                kernel_size_attn = args.kernel_size_attn,
+                                padding_attn = args.padding_attn,
+                                type_adapter_attn = args.type_adapter_attn,
+                                position_attn = args.position_attn,
+                                num_adapter = args.num_adapter,
+                                aggregation = args.aggregation,
+                                std = args.std,
+                                mean = args.mean,                              
+                                bias = args.bias,
+
+        )
+
+        print("************************************************************************   MODELLO NUOVO *****************************************************")
+        print("***********************************************************************************************************************************************")
+        for k in list(net.state_dict().keys()):
+            if "g_s" in k:
+                print(k)
+
+        
+        return net, modello_base
+
+
+
+
+    elif args.name_model == "WACNN":
+        if args.train_baseline:
+            checkpoint = torch.load(args.pret_checkpoint , map_location=device)
+            net = from_state_dict(models["base"], checkpoint)
+            net.to(device)
+            net.update()
+            return net, net
+        else:
+            if args.origin_model == "base":
+                checkpoint = torch.load(args.pret_checkpoint , map_location=device)#["state_dict"]
+            else:
+                checkpoint = torch.load(args.pret_checkpoint , map_location=device)["state_dict"]
+            modello_base = from_state_dict(models[args.origin_model], checkpoint)
+            modello_base.update()
+            modello_base.to(device) 
 
 
 
 
 
-        net = models["gate"](N = args.N,
-                            M =args.M,
-                            dim_adapter_attn = args.dim_adapter_attn,
-                            stride_attn = args.stride_attn,
-                            kernel_size_attn = args.kernel_size_attn,
-                            padding_attn = args.padding_attn,
-                            type_adapter_attn = args.type_adapter_attn,
-                            position_attn = args.position_attn,
-                            num_adapter = args.num_adapter,
-                            aggregation = args.aggregation,
-                            std = args.std,
-                            mean = args.mean,                              
-                            bias = args.bias,
-                            skipped = args.skipped
-                                ) 
 
 
-        state_dict = modello_base.state_dict()
-        if args.origin_model == "base":
-            state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.6.original_model_weights.weight", stringa = "g_s.6.weight" ): v for k, v in state_dict.items()}
-            state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.6.original_model_weights.bias", stringa = "g_s.6.bias" ): v for k, v in state_dict.items()}
-            state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.8.original_model_weights.weight", stringa = "g_s.8.weight" ): v for k, v in state_dict.items()}
-            state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.8.original_model_weights.bias", stringa = "g_s.8.bias" ): v for k, v in state_dict.items()}
+            net = models["gate"](N = args.N,
+                                M =args.M,
+                                dim_adapter_attn = args.dim_adapter_attn,
+                                stride_attn = args.stride_attn,
+                                kernel_size_attn = args.kernel_size_attn,
+                                padding_attn = args.padding_attn,
+                                type_adapter_attn = args.type_adapter_attn,
+                                position_attn = args.position_attn,
+                                num_adapter = args.num_adapter,
+                                aggregation = args.aggregation,
+                                std = args.std,
+                                mean = args.mean,                              
+                                bias = args.bias,
+                                skipped = args.skipped
+                                    ) 
+
+
+            state_dict = modello_base.state_dict()
+            if args.origin_model == "base":
+                state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.6.original_model_weights.weight", stringa = "g_s.6.weight" ): v for k, v in state_dict.items()}
+                state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.6.original_model_weights.bias", stringa = "g_s.6.bias" ): v for k, v in state_dict.items()}
+                state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.8.original_model_weights.weight", stringa = "g_s.8.weight" ): v for k, v in state_dict.items()}
+                state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.8.original_model_weights.bias", stringa = "g_s.8.bias" ): v for k, v in state_dict.items()}
+                
+
+            if args.pret_checkpoint_gate != "none":
+                print("ENTRO QUA SE VOGLIO IL GATE PRE ALLENATO!!!!!!!!")
+                gate_dict = torch.load(args.pret_checkpoint_gate , map_location=device)["state_dict"]
+                for k in list(gate_dict.keys()):
+                    if "gate." in k:
+                        state_dict[k] = gate_dict[k]
+
             
 
-        if args.pret_checkpoint_gate != "none":
-            print("ENTRO QUA SE VOGLIO IL GATE PRE ALLENATO")
-            gate_dict = torch.load(args.pret_checkpoint_gate , map_location=device)["state_dict"]
-            for k in list(gate_dict.keys()):
-                if "gate." in k:
-                    state_dict[k] = gate_dict[k]
-
-        
-
-        
-        info = net.load_state_dict(state_dict, strict=False)
-        net.to(device)
-        return net, modello_base
+            
+            info = net.load_state_dict(state_dict, strict=False)
+            net.to(device)
+            return net, modello_base
 
 
 
@@ -179,15 +242,15 @@ def main(argv):
     test_transforms = transforms.Compose([transforms.ToTensor()])
 
 
-    train_dataset = AdapterDataset(root = args.root, path = args.train_datasets, transform= train_transforms)
+    train_dataset = AdapterDataset(root = args.root, path = args.train_datasets, classes = args.considered_classes, transform= train_transforms, num_element = 20000)
     train_dataloader = DataLoader(train_dataset,batch_size=args.batch_size,num_workers=4,shuffle=True, pin_memory=(device == device),)
     
 
-    valid_dataset = AdapterDataset(root = args.root, path = args.valid_datasets, transform= valid_transforms)
+    valid_dataset = AdapterDataset(root = args.root, path = args.valid_datasets,classes = args.considered_classes, transform= valid_transforms,num_element = 1000)
     valid_dataloader = DataLoader(valid_dataset,batch_size= args.batch_size ,num_workers=4,shuffle=False, pin_memory=(device == device),)
     
 
-    test_total_dataset = AdapterDataset(root = args.root, path  =  args.test_datasets, transform = test_transforms)
+    test_total_dataset = AdapterDataset(root = args.root, path  =  args.test_datasets, classes = args.considered_classes ,transform = test_transforms,num_element = 200,train = False)
     
     test_total_dataloader = DataLoader(test_total_dataset,batch_size= 1,num_workers=4,shuffle=False, pin_memory=(device == device),)
     
@@ -195,6 +258,7 @@ def main(argv):
 
     #evaluate_base_model(modello_base,args,device)
 
+    
     
     print("CONTROLLO DATASET!!!!!")
     
@@ -228,7 +292,7 @@ def main(argv):
 
 
     if args.train_baseline:
-        criterion = RateDistortionLoss(lmbda = args.lmbda)
+        criterion = DistorsionLoss(lmbda = args.lmbda)
     else:
         if args.training_policy == "gate":
             criterion =  GateLoss()
@@ -254,8 +318,12 @@ def main(argv):
     counter = 0
     best_loss = float("inf")
 
+    writing = "/scratch/KD/devil2022/results/adapters/q6/" + "_" + str(args.lmbda)
 
-    epoch = 0
+    if args.restart_training is False:
+        epoch = 0
+    else:
+        epoch = torch.load(args.pret_checkpoint)["epoch"]
 
     handle_trainable_pars(net,args, epoch)
 
@@ -294,7 +362,7 @@ def main(argv):
 
         is_best = loss_valid < best_loss
         best_loss = min(loss_valid, best_loss)
-        filename, filename_best =  create_savepath(args, epoch)
+        filename, filename_best =  create_savepath(args, epoch, epoch_enc)
 
 
 
@@ -324,14 +392,14 @@ def main(argv):
         }
 
         wandb.log(log_dict)
-        # learning rate stuff 
+        # learning rate stuf
         print("start the part related to beta")
 
 
-        if epoch%5==0 or (is_best and epoch > 50):
+        if epoch%10==0 or (is_best and epoch > 50):
 
             net.update()
-            evaluate_base_model_gate(net, args,device, epoch_enc,oracle = args.oracle, train_baseline = args.train_baseline)
+            evaluate_base_model_gate(net, args,device, epoch_enc,args.num_adapter,oracle = args.oracle, train_baseline = args.train_baseline, writing  = writing)
             epoch_enc += 1
             
         
@@ -355,6 +423,6 @@ def main(argv):
     
 if __name__ == "__main__":
     #Enhanced-imagecompression-adapter-sketch -DCC-q1 #ssss
-    wandb.init(project="DCC-q2", entity="albertopresta")   
+    wandb.init(project="DCC-q6-painting", entity="albertopresta")   
     main(sys.argv[1:])
 

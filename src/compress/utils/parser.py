@@ -71,7 +71,7 @@ def parse_args(argv):
     parser.add_argument("--patience",default=10,type=int,help="patience",)
 
 
-    parser.add_argument('--training_policy', '-tp',type = str, default = "ratedistortion", choices= ["entire", "quantization", "adapter","mse", "ratedistortion"] , help='adapter loss')
+    parser.add_argument('--training_policy', '-tp',type = str, default = "mse", choices= ["entire", "quantization", "adapter","mse", "ratedistortion"] , help='adapter loss')
 
     
 
@@ -159,23 +159,28 @@ def parse_args_gate(argv):
     parser = argparse.ArgumentParser(description="Example training script.")
 
 
-    parser.add_argument("-e","--epochs",default=800,type=int,help="Number of epochs (default: %(default)s)",)
+    parser.add_argument("-e","--epochs",default=400,type=int,help="Number of epochs (default: %(default)s)",)
+
+    parser.add_argument("--name_model", type=str,default = "WACNN", choices = ["WACNN","cheng"], help="possible models")
 
     parser.add_argument("--num_adapter", default = 3, type = int)
     parser.add_argument("--seed", type=float,default = 42, help="Set random seed for reproducibility")
     parser.add_argument("--root", type=str,default = "/scratch/dataset/DomainNet/splitting/mixed", help="base root for dataset")
+
+
+    parser.add_argument("--considered_classes", nargs='+', type = str, default = ["openimages","clipart","painting"])
     parser.add_argument("--train_datasets", nargs='+', type = str, default = ["train.txt"])
-    parser.add_argument("--valid_datasets", nargs='+', type = str, default = ["valid_clipart.txt","valid_sketch.txt","valid_openimages.txt"])
-    parser.add_argument("--test_datasets", nargs='+', type = str, default = ["test_clipart.txt","test_sketch.txt","test_kodak.txt","test_clic.txt"])
-    parser.add_argument("--lmbda",type=float,default=1.0,help="Bit-rate distortion parameter (default: %(default)s)",)
+    parser.add_argument("--valid_datasets", nargs='+', type = str, default = ["valid_clipart.txt","valid_sketch.txt","valid_openimages.txt","valid_painting.txt"])
+    parser.add_argument("--test_datasets", nargs='+', type = str, default = ["test_clipart.txt","test_sketch.txt","test_kodak.txt","test_clic.txt","test_painting.txt"])
+    parser.add_argument("--lmbda",type=float,default=1.5,help="Bit-rate distortion parameter (default: %(default)s)",)
     parser.add_argument("--batch-size", type=int, default=16, help="Batch size (default: %(default)s)") 
 
     parser.add_argument("--N",default=192,type=int,help="Number of epochs (default: %(default)s)",) 
     parser.add_argument("--M",default=320,type=int,help="Number of epochs (default: %(default)s)",) 
 
     parser.add_argument("--origin_model",type = str,default="base")
-    parser.add_argument("--pret_checkpoint",default = "/scratch/universal-dic/weights/q2/model.pth")
-    parser.add_argument("--pret_checkpoint_gate",default ="none") #/scratch/KD/devil2022/gate/q6_gate.pth.tar #ddd
+    parser.add_argument("--pret_checkpoint",default = "/scratch/universal-dic/weights/q6/model.pth") #/scratch/KD/devil2022/derivation/q1/model.pth.tar
+    parser.add_argument("--pret_checkpoint_gate",default ="none") #/scratch/KD/devil2022/gate/q6_gate.pth.tar #dddddd
     parser.add_argument("--patience",default=15,type=int,help="patience",)
     parser.add_argument("--patch-size",type=int,nargs=2,default=(256, 256),help="Size of the patches to be cropped (default: %(default)s)",)
     parser.add_argument("--starting_epoch",default=-1,type=int,help="starting_epoch",)
@@ -209,8 +214,13 @@ def parse_args_gate(argv):
 
 
     parser.add_argument("--suffix",default=".pth.tar",type=str,help="factorized_annealing",)
-    parser.add_argument('--training_policy', '-tp',type = str, default = "e2e",choices = ["gate","e2e","adapter","fgta","e2e_mse"], help='adapter loss')
-    parser.add_argument('--writing',type = str, default =  "/scratch/KD/devil2022/results/BaseModel/q2/", help='adapter loss')
+    parser.add_argument('--training_policy', '-tp',type = str, default = "e2e",choices = ["gate","e2e","adapter","fgta","e2e_mse","mse"], help='adapter loss')
+    parser.add_argument('--writing',type = str, default =  "/scratch/KD/cheng2020/results/Baseline/q6/", help='adapter loss')
+
+
+    # cheng stuff 
+    parser.add_argument("--quality",default=6,type=int,help="quality, from 1 to 6",)
+
 
     args = parser.parse_args(argv)
     return args

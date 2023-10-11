@@ -329,11 +329,12 @@ class AdapterDataset(Dataset):
 
 
 
-    def __init__(self, root, path=["train.txt"], transform = None, num_natural = 50000, num_sketch =50000, num_clipart = 50000):
+    def __init__(self, root, path=["train.txt"], transform = None, classes = ["openimages","sketch","clipart","painting","infograph"], num_element = 20000, train = True):
 
 
 
-        cont_nat, cont_sketch, cont_clip = 0,0,0
+        #cont_nat, cont_sketch, cont_clip, cont_painting = 0,0,0,0 #ciao
+        self.classes = classes
         self.samples =[]# [f for f in splitdir.iterdir() if f.is_file()]   
         for p in path:
 
@@ -342,21 +343,44 @@ class AdapterDataset(Dataset):
             file_d = open(splitdir,"r") 
             Lines = file_d.readlines()
 
+            self.class_label = {}
+            if train is True:
+                
+                for i,cl in enumerate(classes):
+                    self.class_label[cl] = i
+            else: 
+                self.class_label["kodak"] = 0
+                self.class_label["clic"] = 0
 
-                   
+                for i,cl in enumerate(classes):
+                    if cl != "openimages":
+                        self.class_label[cl] = i
 
-            for i,lines in enumerate(Lines):
-                if i%10000==0:
-                    print(i)
-                if int(lines.split(" ")[1]) == 0 and cont_nat < num_natural:
-                    self.samples.append((lines.split(" ")[0], lines.split(" ")[1]))
-                    cont_nat +=1
-                if int(lines.split(" ")[1]) == 1 and cont_sketch < num_sketch:
-                    self.samples.append((lines.split(" ")[0], lines.split(" ")[1]))
-                    cont_sketch +=1     
-                if int(lines.split(" ")[1]) == 2 and cont_clip < num_clipart:
-                    self.samples.append((lines.split(" ")[0], lines.split(" ")[1]))
-                    cont_clip +=1  
+            print("££££££££££££££££££££$$$£££v ",self.class_label)
+
+            
+
+            
+            for cl in list(self.class_label.keys()):
+                counter = 0
+                for i,lines in enumerate(Lines):
+                    if cl in lines and counter < num_element:
+                        self.samples.append((lines.split(" ")[0], str(self.class_label[cl])))
+                        counter +=1
+                        if i % 10000==0:
+                            print(i," ", self.samples[-1])
+
+                    """
+                    if "sketch"in lines and cont_sketch < num_element: #dddd
+                        self.samples.append((lines.split(" ")[0], str(self.class_label["sketch"])))
+                        cont_sketch +=1     
+                    if "clipart" in lines and cont_clip < num_element:
+                        self.samples.append((lines.split(" ")[0],  str(self.class_label["clipart"])))
+                        cont_clip +=1  
+                    if "painting" in lines and cont_painting < num_element:
+                        self.samples.append((lines.split(" ")[0], str(self.class_label["painting"])))
+                        cont_painting +=1
+                    """  
 
         shuffle(self.samples)
         print("lunghezza: ",len(self.samples))
@@ -377,16 +401,16 @@ class AdapterDataset(Dataset):
 
 
 
-def create_data_file_for_multiple_adapters(classes = {"natural": 0},
-                                            split = "test", 
+def create_data_file_for_multiple_adapters(classes = {"infograph":4},
+                                            split = "valid", 
                                            savepath = "/scratch/dataset/DomainNet/splitting/mixed",
-                                           num_im_per_class = 916,
+                                           num_im_per_class = 1016,
                                            random_seed = 42):
    
     if split == "train":
         fls = savepath + "/" + split + ".txt"
     else: 
-        fls = savepath + "/" + "valid_openimages" + ".txt"
+        fls = savepath + "/" + "valid_infograph" + ".txt"
     f=open(fls , "a+")
 
     seed(random_seed)
@@ -404,10 +428,9 @@ def create_data_file_for_multiple_adapters(classes = {"natural": 0},
                 f=open(fls , "a+")
                 f.write( single_images + " " + str(classes[cl]) + "\n")
                 f.close()  
-        elif cl in ("sketch","clipart"):
+        elif cl in ("sketch","clipart","painting","infograph"):
 
 
-            
             pth = "/scratch/dataset/DomainNet/splitting/" + cl  + "/total_" + split + ".txt"
             file_d = open(pth,"r") 
             Lines = file_d.readlines()
@@ -436,7 +459,7 @@ def create_data_file_for_multiple_adapters(classes = {"natural": 0},
 
 
 
-def build_test_datafile(type = "clipart", savepath = "/scratch/dataset/DomainNet/splitting/mixed/"):
+def build_test_datafile(type = "infograph", savepath = "/scratch/dataset/DomainNet/splitting/mixed/"):
     if type in ("kodak","clic"):
         classe = "0"
         fls = savepath + "/" + "test_" + type + ".txt"
@@ -449,8 +472,8 @@ def build_test_datafile(type = "clipart", savepath = "/scratch/dataset/DomainNet
             f.write(files  + " " + classe + "\n")
             f.close()        
 
-    elif type in ("clipart","sketch"):
-        path = savepath + "valid.txt"
+    elif type in ("clipart","sketch","painting", "infograph"):
+        path = savepath + "valid_infograph_temp.txt"
         file_d = open(path,"r") 
         Lines = file_d.readlines()
         lista_immagini = []

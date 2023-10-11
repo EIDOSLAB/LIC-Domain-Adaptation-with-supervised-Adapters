@@ -63,11 +63,11 @@ def plot_rate_distorsion(risultati,  savepath):
         plt.plot(bpp,psnr,tratteggio,color = colore, label = type_name ,markersize=7)
         plt.plot(bpp, psnr,'o',color =  colore, markersize=5)
 
-
+    print("----> tipo ",type(psnr))
     plt.ylabel('PSNR', fontsize = 30)
-    plt.yticks([32,33,34,35, 36,37,38,39])
+    plt.yticks([32,33,34,35, 36,37,38,39,40])
 
-    plt.xticks([0.2, 0.3,0.4,0.5,0.6,0.7,0.8])
+    plt.xticks([0.1,0.2, 0.3,0.4,0.5,0.6])
     plt.xlabel('Bit-rate [bpp]', fontsize = 30)
     plt.yticks(fontsize=27)
     plt.xticks(fontsize=27)
@@ -76,7 +76,7 @@ def plot_rate_distorsion(risultati,  savepath):
     plt.legend(loc='lower right', fontsize = 25)
 
 
-    nome = "prova.png"
+    nome = "result.png"
 
     cp =  os.path.join(savepath,nome)
 
@@ -92,12 +92,14 @@ def plot_rate_distorsion(risultati,  savepath):
     
 
 def main():
+    domain = "clipart"
 
-    files_path = "../../results/files/sketch"#args.path # path con i risultati su txt
-    lista_files = [files_path + "/" + f  for f in os.listdir(files_path)]
+    files_path = "../../results/files/" + domain#args.path # path con i risultati su txt
+    #exclusions = ["q2","q3"]
+    lista_files = [files_path + "/" + f  for f in os.listdir(files_path) if "q2" not in f]
 
     risultati = {}
-    savepath =  "../../results/images/sketch"
+    savepath =  "../../results/images/" + domain 
 
     ii = 0
     for i,f in enumerate(lista_files): 

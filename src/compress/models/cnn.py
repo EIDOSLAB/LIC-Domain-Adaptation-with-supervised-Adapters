@@ -162,11 +162,11 @@ class WACNN(CompressionModel):
                 
 
 
-    def pars_decoder(self,re_grad = False, st = [0,1,2,3,4,5,6,7]):
+    def pars_decoder(self,re_grad = True, starting = 0):
         
 
         for i,lev in enumerate(self.g_s):
-            if i in  st:
+            if i >=  starting:
                 for n,p in lev.named_parameters():
                     p.requires_grad = re_grad
             else:

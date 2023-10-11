@@ -40,10 +40,10 @@ def sec_to_hours(seconds):
 
 from datetime import datetime
 from os.path import join         
-def create_savepath(args,epoch):
+def create_savepath(args,epoch,epoch_enc):
     now = datetime.now()
     date_time = now.strftime("%m%d")
-    c = join(date_time,"_lambda_",str(args.lmbda),"_epoch_",str(epoch)).replace("/","_")
+    c = join(date_time,"_lambda_",str(args.lmbda),"_epoch_",str(epoch),"_epochenc_",str(epoch_enc)).replace("/","_")
 
     
     c_best = join(c,"best").replace("/","_")
