@@ -43,7 +43,7 @@ def parse_args_gate(argv):
     parser.add_argument("--name_model", type=str,default = "WACNN", choices = ["WACNN","cheng"], help="possible models")
 
     parser.add_argument("--seed", type=float,default = 42, help="Set random seed for reproducibility")
-    parser.add_argument("--root", type=str,default = "/scratch/dataset/DomainNet/mixed", help="base root for dataset") #"/scratch/dataset/domain_adapter/MixedImageSets"
+    parser.add_argument("--root", type=str,default = "/scratch/dataset/DomainNet/splitting/mixed", help="base root for dataset") #"/scratch/dataset/domain_adapter/MixedImageSets"
 
 
     parser.add_argument("--considered_classes", nargs='+', type = str, default = ["openimages","sketch","infograph"]) # ["openimages","sketch","clipart",,"painting","infograph"] #["natural","sketch","infographics"]
