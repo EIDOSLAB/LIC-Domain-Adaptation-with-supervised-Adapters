@@ -43,11 +43,11 @@ def parse_args_gate(argv):
     parser.add_argument("--name_model", type=str,default = "WACNN", choices = ["WACNN","cheng"], help="possible models")
 
     parser.add_argument("--seed", type=float,default = 42, help="Set random seed for reproducibility")
-    parser.add_argument("--root", type=str,default = "/scratch/dataset/domain_adapter/MixedImageSets", help="base root for dataset") #"/scratch/dataset/domain_adapter/MixedImageSets"
+    parser.add_argument("--root", type=str,default = "/scratch/dataset/DomainNet/mixed", help="base root for dataset") #"/scratch/dataset/domain_adapter/MixedImageSets"
 
 
-    parser.add_argument("--considered_classes", nargs='+', type = str, default = ["natural","sketch","infographics"]) # ["openimages","sketch","clipart",,"painting","infograph"] #["natural","sketch","infographics"]
-    parser.add_argument("--train_datasets", nargs='+', type = str, default = ["_natural_.txt","_sketch_.txt","_infographics_.txt"]) #["_natural_.txt","_sketch_.txt","_infographics_.txt"]
+    parser.add_argument("--considered_classes", nargs='+', type = str, default = ["openimages","sketch","infograph"]) # ["openimages","sketch","clipart",,"painting","infograph"] #["natural","sketch","infographics"]
+    parser.add_argument("--train_datasets", nargs='+', type = str, default = ["train.txt"]) #["_natural_.txt","_sketch_.txt","_infographics_.txt"]
     parser.add_argument("--valid_datasets", nargs='+', type = str, default =["_natural_.txt","_sketch_.txt","_infographics_.txt"]) # ["valid_openimages.txt","valid_sketch.txt","valid_clipart.txt","valid_painting.txt","valid_infograph.txt"] 
     parser.add_argument("--test_datasets", nargs='+', type = str, default = ["_kodak_.txt","_clic_.txt","_sketch_.txt","_infographics_.txt"]) # ["test_kodak.txt","test_clic.txt","test_sketch.txt","test_clipart.txt","test_painting.txt","test_infograph.txt"] #["_kodak_.txt","_clic_.txt","_sketch_.txt","_comic_.txt","_infographics_.txt","_watercolor_.txt"]
     parser.add_argument("--lmbda",type=float,default=2.5,help="Bit-rate distortion parameter (default: %(default)s)",)
@@ -94,7 +94,7 @@ def parse_args_gate(argv):
 
     parser.add_argument("--suffix",default=".pth.tar",type=str,help="factorized_annealing",)
     parser.add_argument('--training_policy', '-tp',type = str, default = "e2e",choices = ["gate","e2e","adapter","fgta","e2e_mse","mse"], help='adapter loss')
-    parser.add_argument('--writing',type = str, default =  "/scratch/KD/devil2022/results/starting/q5/", help='adapter loss')
+    parser.add_argument('--writing',type = str, default =  "/scratch/KD/devil2022/results/starting/q5/DomainNet", help='adapter loss')
 
 
     # cheng stuff 

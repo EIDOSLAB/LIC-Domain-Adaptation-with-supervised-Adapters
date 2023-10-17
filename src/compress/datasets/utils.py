@@ -234,7 +234,7 @@ class AdapterDataset(Dataset):
 
 
         #self.samples = self.samples[:100]
-        print(self.samples[:5])
+
         print("lunghezza: ",len(self.samples))
         self.transform = transform
 

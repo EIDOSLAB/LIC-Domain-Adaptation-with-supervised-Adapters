@@ -26,51 +26,18 @@ def evaluate_base_model(model, args,device):
     model.to(device)
     model.update()
     test_transforms = transforms.Compose([transforms.ToTensor()])
-    """
-    
-    print("***************************************** KODAK *************************************************")
-    kodak = AdapterDataset(root = args.root, path  =  ["test_kodak.txt"], transform = test_transforms)
-    kodak_f = kodak.samples
-    kodak_filelist = []
-    for i in range(len(kodak_f)):
-        kodak_filelist.append(kodak_f[i][0])
-    psnr, bpp = compress_with_ac(model, kodak_filelist, device, -1, loop=False, writing= args.writing + "kodak_")
-    print(psnr,"  ",bpp)
 
-    print("****************************************** CLIC ****************************************************************")
-    clic = AdapterDataset(root = args.root, path  =  ["test_clic.txt"], transform = test_transforms)
-    clic_f = clic.samples
-    clic_filelist = []
-    for i in range(len(clic_f)):
-        clic_filelist.append(clic_f[i][0])
-    psnr, bpp = compress_with_ac(model, clic_filelist, device, -1, loop=False, writing= args.writing + "clic_")
-    print(psnr,"  ",bpp)
-
-    print("****************************************** sketch ****************************************************************")
-    sketch = AdapterDataset(root = args.root, path  =  ["test_sketch.txt"], transform = test_transforms)
-    sketch_f = sketch.samples
-    sketch_filelist = []
-    for i in range(len(sketch_f)):
-        sketch_filelist.append(sketch_f[i][0])
-    psnr, bpp = compress_with_ac(model, sketch_filelist, device, -1, loop=False, writing= args.writing + "sketch_")
-    print(psnr,"  ",bpp)
-
-    print("****************************************** clipart ****************************************************************")
-    clipart = AdapterDataset(root = args.root, path  =  ["test_clipart.txt"], transform = test_transforms)
-    clipart_f = clipart.samples
-    clipart_filelist = []
-    for i in range(len(clipart_f)):
-        clipart_filelist.append(clipart_f[i][0])
-    psnr, bpp = compress_with_ac(model, clipart_filelist, device, -1, loop=False, writing= args.writing + "clipart_")
-    print(psnr,"  ",bpp)
-    """
 
     print("****************************************** SKETCH ****************************************************************")
+    if "sketch" not in args.considered_classes:
+        cons_classes = args.considered_classes + ["sketch"]
+    else:
+        cons_classes = args.considered_classes 
     painting = AdapterDataset(root = args.root + "/test", 
                               path  =  ["_sketch_.txt"],
-                              classes = args.considered_classes, 
+                              classes = cons_classes, 
                               transform = test_transforms,
-                               num_element = 20,
+                               num_element = 25,
                               train = False)
     painting_f = painting.samples
     painting_filelist = []
@@ -80,12 +47,16 @@ def evaluate_base_model(model, args,device):
     print(psnr,"  ",bpp)
 
 
-    print("******************************************  COMIC ****************************************************************")
+    print("******************************************  CLIPART ****************************************************************")
+    if "clipart" not in args.considered_classes:
+        cons_classes = args.considered_classes + ["clipart"]
+    else:
+        cons_classes = args.considered_classes 
     painting = AdapterDataset(root = args.root + "/test", 
-                              path  =  ["_comic_.txt"],
-                              classes = args.considered_classes + ["comic"],
+                              path  =  ["_clipart_.txt"],
+                              classes = cons_classes,
                                 transform = test_transforms,
-                                num_element=20,
+                                num_element=25,
                                 train = False)
     painting_f = painting.samples
     painting_filelist = []
@@ -98,7 +69,7 @@ def evaluate_base_model(model, args,device):
                               path  =  ["_kodak_.txt"],
                               classes = args.considered_classes,
                                 transform = test_transforms,
-                                num_element=20,
+                                num_element=25,
                                 train = False)
     painting_f = painting.samples
     painting_filelist = []
@@ -108,11 +79,15 @@ def evaluate_base_model(model, args,device):
     print(psnr,"  ",bpp)
 
     print("******************************************  INFO ****************************************************************")
+    if "comic" not in args.considered_classes:
+        cons_classes = args.considered_classes + ["infograph"]
+    else:
+        cons_classes = args.considered_classes 
     painting = AdapterDataset(root = args.root + "/test", 
-                              path  =  ["_infographics_.txt"],
+                              path  =  ["_infograph_.txt"],
                               classes = args.considered_classes,
                                 transform = test_transforms,
-                                num_element=20,
+                                num_element=25,
                                 train = False)
     painting_f = painting.samples
     painting_filelist = []
@@ -120,12 +95,36 @@ def evaluate_base_model(model, args,device):
         painting_filelist.append(painting_f[i][0])
     psnr, bpp = compress_with_ac(model, painting_filelist, device, -1, loop=False, writing= args.writing + "infographics_")
     print(psnr,"  ",bpp)
-    print("******************************************  INFO ****************************************************************")
+    print("******************************************  PAINTING ****************************************************************")
+
+    if "painting" not in args.considered_classes:
+        cons_classes = args.considered_classes + ["painting"]
+    else:
+        cons_classes = args.considered_classes 
     painting = AdapterDataset(root = args.root + "/test", 
-                              path  =  ["_watercolor_.txt"],
-                              classes = args.considered_classes  + ["watercolor"],
+                              path  =  ["_painting_.txt"],
+                              classes = cons_classes,
                                 transform = test_transforms,
-                                num_element=20,
+                                num_element=25,
+                                train = False)
+    painting_f = painting.samples
+    painting_filelist = []
+    for i in range(len(painting_f)):
+        painting_filelist.append(painting_f[i][0])
+    psnr, bpp = compress_with_ac(model, painting_filelist, device, -1, loop=False, writing= args.writing + "watercolor_")
+    print(psnr,"  ",bpp)
+
+    print("******************************************  PAINTING ****************************************************************")
+
+    if "quickdraw" not in args.considered_classes:
+        cons_classes = args.considered_classes + ["quickdraw"]
+    else:
+        cons_classes = args.considered_classes 
+    painting = AdapterDataset(root = args.root + "/test", 
+                              path  =  ["_quickdraw_.txt"],
+                              classes = cons_classes,
+                                transform = test_transforms,
+                                num_element=25,
                                 train = False)
     painting_f = painting.samples
     painting_filelist = []
@@ -309,7 +308,7 @@ def main(argv):
     test_transforms = transforms.Compose([transforms.ToTensor()])
 
     # args.root + "/train"
-    train_dataset = AdapterDataset(root = args.root + "/train", path = args.train_datasets, classes = args.considered_classes, transform= train_transforms, num_element = 4000)
+    train_dataset = AdapterDataset(root = args.root + "/train", path = args.train_datasets, classes = args.considered_classes, transform= train_transforms, num_element = 25000)
     train_dataloader = DataLoader(train_dataset,batch_size=args.batch_size,num_workers=4,shuffle=True, pin_memory=(device == device),)
         
 
@@ -317,7 +316,7 @@ def main(argv):
     valid_dataloader = DataLoader(valid_dataset,batch_size= args.batch_size ,num_workers=4,shuffle=False, pin_memory=(device == device),)
         
 
-    test_total_dataset = AdapterDataset(root = args.root + "/test", path  =  args.test_datasets, classes = args.considered_classes ,transform = test_transforms,num_element = 20,train = False)
+    test_total_dataset = AdapterDataset(root = args.root + "/test", path  =  args.test_datasets, classes = args.considered_classes ,transform = test_transforms,num_element = 25,train = False)
         
     test_total_dataloader = DataLoader(test_total_dataset,batch_size= 1,num_workers=4,shuffle=False, pin_memory=(device == device),)
         
@@ -326,7 +325,7 @@ def main(argv):
     evaluate_base_model(modello_base,args,device)
 
     
-    """
+    
     print("CONTROLLO DATASET!!!!!")
     
     train_tens = torch.zeros(len(train_dataset.samples))
@@ -491,10 +490,10 @@ def main(argv):
         print("Runtime of the epoch:  ", epoch)
         sec_to_hours(end - start) 
         print("END OF EPOCH! ", epoch)
-    """
+    
     
 if __name__ == "__main__":
     #Enhanced-imagecompression-adapter-sketch -DCC-q1 #ssssssssssss
-    wandb.init(project="DCC-q5-trial", entity="albertopresta")   
+    wandb.init(project="DCC-q5-DomainNet", entity="albertopresta")   
     main(sys.argv[1:])
 

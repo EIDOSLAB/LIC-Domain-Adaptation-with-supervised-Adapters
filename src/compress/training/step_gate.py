@@ -469,10 +469,15 @@ def evaluate_base_model_gate(model, args,device, epoch,num_adapter, oracle, trai
     test_transforms = transforms.Compose([transforms.ToTensor()])
     print("***************************************** info *************************************************")
     if "infographics" not in args.considered_classes:
-        cons_classes = args.considered_classes + ["infographics"]
+        cons_classes = args.considered_classes + ["infograph"]
     else:
         cons_classes = args.considered_classes   
-    kodak = AdapterDataset(root = args.root + "/test", path  =  ["_infographics_.txt"],classes =cons_classes, num_element = 20, transform = test_transforms,train = False)
+    kodak = AdapterDataset(root = args.root + "/test", 
+                           path  =  ["_infograph.txt"],
+                           classes =cons_classes, 
+                           num_element = 25, 
+                           transform = test_transforms,
+                           train = False)
     kodak_f = kodak.samples
     kodak_filelist = []
     kodak_cl = [] if oracle else None
@@ -486,7 +491,7 @@ def evaluate_base_model_gate(model, args,device, epoch,num_adapter, oracle, trai
                                       epoch,
                                       num_adapter, 
                                       loop=True, 
-                                      name= "infographics_", 
+                                      name= "infograph_", 
                                       oracles = kodak_cl,  
                                       train_baseline= train_baseline,
                                       writing = writing,
@@ -494,7 +499,12 @@ def evaluate_base_model_gate(model, args,device, epoch,num_adapter, oracle, trai
     print(psnr,"  ",bpp)
 
     print("****************************************** kodak ****************************************************************")
-    clic = AdapterDataset(root = args.root + "/test", path  =  ["_kodak_.txt"],classes = args.considered_classes, num_element = 24,transform = test_transforms,train = False)
+    clic = AdapterDataset(root = args.root + "/test",
+                           path  =  ["_kodak_.txt"],
+                           classes = args.considered_classes,
+                             num_element = 24,
+                             transform = test_transforms,
+                             train = False)
     clic_f = clic.samples
     clic_filelist = []
     clic_cl = [] if oracle else None
@@ -516,11 +526,16 @@ def evaluate_base_model_gate(model, args,device, epoch,num_adapter, oracle, trai
     
 
     print("****************************************** comic **************************************************************4444**")
-    if "comic" not in args.considered_classes:
-        cons_classes = args.considered_classes + ["comic"]
+    if "clipart" not in args.considered_classes:
+        cons_classes = args.considered_classes + ["clipart"]
     else:
         cons_classes = args.considered_classes   
-    clipart = AdapterDataset(root = args.root + "/test", path  =  ["_comic_.txt"],classes = cons_classes, num_element = 20, transform = test_transforms,train = False)
+    clipart = AdapterDataset(root = args.root + "/test", 
+                             path  =  ["_clipart_.txt"],
+                             classes = cons_classes, 
+                             num_element = 25, 
+                             transform = test_transforms,
+                             train = False)
     clipart_f = clipart.samples
     clipart_filelist = []
     clipart_cl = [] if oracle else None
@@ -534,18 +549,23 @@ def evaluate_base_model_gate(model, args,device, epoch,num_adapter, oracle, trai
                                       epoch, 
                                       num_adapter,
                                       loop=True, 
-                                      name =  "comic_", 
+                                      name =  "clipart_", 
                                       oracles= clipart_cl, 
                                       train_baseline= train_baseline,
                                        writing = writing)
     print(psnr,"  ",bpp)
-    """
+    
     print("****************************************** PAINTING***************************************+++*************************")
     if "painting" not in args.considered_classes:
         cons_classes = args.considered_classes + ["painting"]
     else:
         cons_classes = args.considered_classes
-    painting = AdapterDataset(root = args.root, path  =  ["test_painting.txt"],classes = cons_classes, transform = test_transforms,train = False)
+    painting = AdapterDataset(root = args.root, 
+                              path  =  ["_painting_.txt"],
+                              classes = cons_classes, 
+                              num_element=25,
+                              transform = test_transforms,
+                              train = False)
     painting_f = painting.samples
     painting_filelist = []
     painting_cl = [] if oracle else None
@@ -566,41 +586,17 @@ def evaluate_base_model_gate(model, args,device, epoch,num_adapter, oracle, trai
     print(psnr,"  ",bpp)
 
 
-    print("****************************************** INFOGRAPH ****************************************************************")
-    
-    if "infograph" not in args.considered_classes:
-        cons_classes = args.considered_classes + ["infograph"]
-    else:
-        cons_classes = args.considered_classes
-    infograph = AdapterDataset(root = args.root, path  =  ["test_infograph.txt"],classes = cons_classes, transform = test_transforms,train = False)
 
-
-    infograph_f = infograph.samples
-    infograph_filelist = []
-    infograph_cl = [] if oracle else None
-    for i in range(len(infograph_f)):
-        infograph_filelist.append(infograph_f[i][0])
-        if oracle:
-            infograph_cl.append(int(infograph_f[i][1]))
-    psnr, bpp = compress_with_ac_gate(model, 
-                                      infograph_filelist, 
-                                      device, 
-                                      epoch, 
-                                      num_adapter,
-                                      loop=True, 
-                                      name =  "infograph_", 
-                                      oracles= infograph_cl, 
-                                      train_baseline= train_baseline,
-                                       writing = writing)
-    print(psnr,"  ",bpp)
-
-    """
     print("****************************************** sketch ****************************************************************")
     if "sketch" not in args.considered_classes:
         cons_classes = args.considered_classes + ["sketch"]
     else:
         cons_classes = args.considered_classes
-    sketch = AdapterDataset(root = args.root + "/test", path  =  ["_sketch_.txt"],classes = cons_classes, num_element = 20, transform = test_transforms)
+    sketch = AdapterDataset(root = args.root + "/test",
+                             path  =  ["_sketch_.txt"],
+                             classes = cons_classes,
+                               num_element = 25, 
+                               transform = test_transforms)
     sketch_f = sketch.samples
     sketch_filelist = []
     sketch_cl = [] if oracle else None
@@ -620,6 +616,7 @@ def evaluate_base_model_gate(model, args,device, epoch,num_adapter, oracle, trai
                                       train_baseline= train_baseline,
                                       writing = writing)
     print(psnr,"  ",bpp)
+    """
     print("****************************************** water ****************************************************************")
     if "watercolor" not in args.considered_classes:
         cons_classes = args.considered_classes + ["watercolor"]
@@ -645,4 +642,5 @@ def evaluate_base_model_gate(model, args,device, epoch,num_adapter, oracle, trai
                                       train_baseline= train_baseline,
                                       writing = writing)
     print(psnr,"  ",bpp)
+    """
     
