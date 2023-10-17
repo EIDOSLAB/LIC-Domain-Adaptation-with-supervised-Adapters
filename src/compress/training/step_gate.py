@@ -92,12 +92,12 @@ def train_one_epoch_gate(model, criterion, train_dataloader, optimizer,training_
             mse_loss.update(out_criterion["mse_loss"].clone().detach())
             bpp_loss.update(out_criterion["bpp_loss"].clone().detach())
 
-        if train_baseline is False:
+        if train_baseline is False and "CrossEntropy" in list(out_criterion.keys()):
             gate_loss.update(out_criterion["CrossEntropy"].clone().detach())
 
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
 
-        if train_baseline is False:
+        if train_baseline is False  and "CrossEntropy" in list(out_criterion.keys()):
             _, predicted = torch.max(F.softmax(out_net["logits"]), 1) # predicted
             predictions.extend(predicted.cpu().numpy().tolist())
             labels.extend(cl.cpu().numpy().tolist())
@@ -122,7 +122,7 @@ def train_one_epoch_gate(model, criterion, train_dataloader, optimizer,training_
 
             )
 
-        if train_baseline is False:
+        if train_baseline is False  and "CrossEntropy" in list(out_criterion.keys()):
             wandb.log({"train_batch":counter,"train_batch/crossentropy":out_criterion["CrossEntropy"].clone().detach().item(),})
 
 
@@ -151,7 +151,7 @@ def train_one_epoch_gate(model, criterion, train_dataloader, optimizer,training_
 
     }
 
-    if train_baseline is False:
+    if train_baseline is False  and "CrossEntropy" in list(out_criterion.keys()):
         wandb.log({"train":epoch,"train/crossentropy":gate_loss.avg,"train/accuracy":accuracy })
 
     if training_policy != "gate":
@@ -168,7 +168,7 @@ def train_one_epoch_gate(model, criterion, train_dataloader, optimizer,training_
 
 
 
-def test_epoch_gate(epoch, test_dataloader, model, criterion, training_policy, valid, oracle, train_baseline ):
+def test_epoch_gate(epoch, test_dataloader, model, criterion, training_policy, valid, oracle, train_baseline):
     model.eval()
     device = next(model.parameters()).device
 
@@ -217,7 +217,7 @@ def test_epoch_gate(epoch, test_dataloader, model, criterion, training_policy, v
 
 
             #if valid:
-            if train_baseline is False:
+            if train_baseline is False and "CrossEntropy" in list(out_criterion.keys()):
                 _, predicted = torch.max(F.softmax(out_net["logits"]), 1) # predicted
                 predictions.extend(predicted.cpu().numpy().tolist())
                 labels.extend(cl.cpu().numpy().tolist())
@@ -229,14 +229,15 @@ def test_epoch_gate(epoch, test_dataloader, model, criterion, training_policy, v
 
             if training_policy != "gate":
                 psnr.update(compute_psnr(d, out_net["x_hat"]))
-                ssim.update(compute_msssim(d, out_net["x_hat"]))
+                ms_ssim_im = -10*math.log10(1 - compute_msssim(d, out_net["x_hat"]))
+                ssim.update(ms_ssim_im)
             
-            if train_baseline is False:
+            if train_baseline is False  and "CrossEntropy" in list(out_criterion.keys()):
                 gate_loss.update(out_criterion["CrossEntropy"])
 
 
     accuracy = 100 * correct / (total + 1e-6)
-    if train_baseline is False:
+    if train_baseline is False  and "CrossEntropy" in list(out_criterion.keys()):
         f1 = f1_score(labels, predictions, average = 'weighted')
     #cm = confusion_matrix(labels, predictions)
 
@@ -261,7 +262,7 @@ def test_epoch_gate(epoch, test_dataloader, model, criterion, training_policy, v
         )
 
 
-        if train_baseline is False:
+        if train_baseline is False  and "CrossEntropy" in list(out_criterion.keys()):
             log_dict =  {
                 "test":epoch,
                 "test/accuracy":accuracy,
@@ -274,7 +275,7 @@ def test_epoch_gate(epoch, test_dataloader, model, criterion, training_policy, v
                 "plot_test":epoch,
                 "plot_test/conf_mat" : wandb.plot.confusion_matrix(probs=None,
                             y_true=labels, preds=predictions,
-                            class_names=["natural","sketch","clipart","painting"])})
+                            class_names=["natural","sketch","infographics"])})
 
 
 
@@ -308,7 +309,7 @@ def test_epoch_gate(epoch, test_dataloader, model, criterion, training_policy, v
 
         }  
         wandb.log(log_dict)
-        if train_baseline is False:
+        if train_baseline is False  and "CrossEntropy" in list(out_criterion.keys()):
             log_dict =  {
                 "valid":epoch,
                 "valid/accuracy":accuracy,
@@ -321,13 +322,23 @@ def test_epoch_gate(epoch, test_dataloader, model, criterion, training_policy, v
                 "plot_valid":epoch,
                 "plot_valid/conf_mat" : wandb.plot.confusion_matrix(probs=None,
                             y_true=labels, preds=predictions,
-                            class_names=["natural","sketch","clipart","painting"])})
+                            class_names=["natural","sketch","infographics"])}) #ddd
 
     return loss.avg
 
 
-
-def compress_with_ac_gate(model,  filelist, device, epoch,num_adapter, loop = True, name = "",  writing = None, oracles = None, train_baseline = False):
+import os
+def compress_with_ac_gate(model,  
+                          filelist, 
+                          device, 
+                          epoch,
+                          num_adapter, 
+                          loop = True, 
+                          name = "",  
+                          writing = None, 
+                          oracles = None, 
+                          train_baseline = False,
+                          save_images = None):
     #model.update(None, device)
     print("ho finito l'update")
     bpp_loss = AverageMeter()
@@ -363,8 +374,17 @@ def compress_with_ac_gate(model,  filelist, device, epoch,num_adapter, loop = Tr
                 out_dec = model.decompress(data["strings"], data["shape"])               
 
             out_dec["x_hat"] = F.pad(out_dec["x_hat"], unpad)
+            out_dec["x_hat"].clamp_(0.,1.)  
 
-            out_dec["x_hat"].clamp_(0.,1.)     
+            if save_images is not None:
+
+
+                image = transforms.ToPILImage()(out_dec['x_hat'].squeeze())
+                nome_salv = os.path.join(save_images, nome_immagine + ".jpg")
+                image.save(nome_salv)
+
+
+
 
             if train_baseline is False:
                 gate_probs = F.softmax(data["gate_values"])
@@ -375,6 +395,7 @@ def compress_with_ac_gate(model,  filelist, device, epoch,num_adapter, loop = Tr
 
             psnr_im = compute_psnr(x, out_dec["x_hat"])
             ms_ssim_im = compute_msssim(x, out_dec["x_hat"])
+            ms_ssim_im = -10*math.log10(1 - ms_ssim_im )
             psnr_val.update(psnr_im)
             mssim_val.update(ms_ssim_im)
             
@@ -386,9 +407,10 @@ def compress_with_ac_gate(model,  filelist, device, epoch,num_adapter, loop = Tr
             bpp_loss.update(bpp)
 
             if writing is not None:
-                fls = writing + ".txt"
+                #fls = writing + "_epoch_" + str(epoch) + "_.txt"
+                fls = writing + name + "_.txt"
                 f=open(fls , "a+")
-                f.write("SEQUENCE "  +   nome_immagine + " BITS " +  str(bpp) + " PSNR " +  str(psnr_im)  + " MSSIM " +  str(ms_ssim_im) + "\n")
+                f.write("SEQUENCE "+nome_immagine+" BITS "+str(bpp)+" PSNR "+str(psnr_im)+" MSSIM "+str(ms_ssim_im)+" probs "+str(gate_probs[0][0].item())+" "+str(gate_probs[0][1].item())+" "+str(gate_probs[0][2].item())+" " + "\n")
                 f.close()  
             
             if "kodak" in name:
@@ -396,7 +418,7 @@ def compress_with_ac_gate(model,  filelist, device, epoch,num_adapter, loop = Tr
 
 
 
-    if train_baseline is False:
+    if train_baseline is False and num_adapter> 1:
         media = torch.mean(mean_softmax,dim = 0).detach().cpu()
         data = [s.item() for s in media]                 
         log_dict = {
@@ -422,7 +444,7 @@ def compress_with_ac_gate(model,  filelist, device, epoch,num_adapter, loop = Tr
     
     if writing is not None:
 
-        fls = writing + "_epochenc_" + str(epoch) +   ".txt"
+        fls = writing + name + "_.txt"
         f=open(fls , "a+")
         f.write("SEQUENCE "  +   "AVG " + "BITS " +  str(bpp_loss.avg) + " YPSNR " +  str(psnr_val.avg)  + " YMSSIM " +  str(mssim_val.avg) + "\n")
 
@@ -436,7 +458,7 @@ def compress_with_ac_gate(model,  filelist, device, epoch,num_adapter, loop = Tr
 
 
 
-def evaluate_base_model_gate(model, args,device, epoch,num_adapter, oracle, train_baseline= False, writing = None):
+def evaluate_base_model_gate(model, args,device, epoch,num_adapter, oracle, train_baseline= False, writing = None,save_images = None):
     """
     Valuto la bontà del modello base, di modo da poter vedere se miglioraiamo qualcosa
     """
@@ -445,8 +467,12 @@ def evaluate_base_model_gate(model, args,device, epoch,num_adapter, oracle, trai
     model.update()
 
     test_transforms = transforms.Compose([transforms.ToTensor()])
-    print("***************************************** KODAK *************************************************")
-    kodak = AdapterDataset(root = args.root, path  =  ["test_kodak.txt"],classes = args.considered_classes, transform = test_transforms,train = False)
+    print("***************************************** info *************************************************")
+    if "infographics" not in args.considered_classes:
+        cons_classes = args.considered_classes + ["infographics"]
+    else:
+        cons_classes = args.considered_classes   
+    kodak = AdapterDataset(root = args.root + "/test", path  =  ["_infographics_.txt"],classes =cons_classes, num_element = 20, transform = test_transforms,train = False)
     kodak_f = kodak.samples
     kodak_filelist = []
     kodak_cl = [] if oracle else None
@@ -460,14 +486,15 @@ def evaluate_base_model_gate(model, args,device, epoch,num_adapter, oracle, trai
                                       epoch,
                                       num_adapter, 
                                       loop=True, 
-                                      name= "kodak_", 
+                                      name= "infographics_", 
                                       oracles = kodak_cl,  
                                       train_baseline= train_baseline,
-                                      writing = writing )
+                                      writing = writing,
+                                       save_images=save_images )
     print(psnr,"  ",bpp)
 
-    print("****************************************** CLIC ****************************************************************")
-    clic = AdapterDataset(root = args.root, path  =  ["test_clic.txt"],classes = args.considered_classes,transform = test_transforms,train = False)
+    print("****************************************** kodak ****************************************************************")
+    clic = AdapterDataset(root = args.root + "/test", path  =  ["_kodak_.txt"],classes = args.considered_classes, num_element = 24,transform = test_transforms,train = False)
     clic_f = clic.samples
     clic_filelist = []
     clic_cl = [] if oracle else None
@@ -481,14 +508,99 @@ def evaluate_base_model_gate(model, args,device, epoch,num_adapter, oracle, trai
                                          epoch,
                                          num_adapter,  
                                          loop=True,
-                                           name = "clic_", 
+                                           name = "kodak_", 
                                            oracles = clic_cl,  
                                            train_baseline= train_baseline,
                                             writing = writing)
     print(psnr,"  ",bpp)
+    
+
+    print("****************************************** comic **************************************************************4444**")
+    if "comic" not in args.considered_classes:
+        cons_classes = args.considered_classes + ["comic"]
+    else:
+        cons_classes = args.considered_classes   
+    clipart = AdapterDataset(root = args.root + "/test", path  =  ["_comic_.txt"],classes = cons_classes, num_element = 20, transform = test_transforms,train = False)
+    clipart_f = clipart.samples
+    clipart_filelist = []
+    clipart_cl = [] if oracle else None
+    for i in range(len(clipart_f)):
+        clipart_filelist.append(clipart_f[i][0])
+        if oracle:
+            clipart_cl.append(int(clipart_f[i][1]))
+    psnr, bpp = compress_with_ac_gate(model, 
+                                      clipart_filelist, 
+                                      device, 
+                                      epoch, 
+                                      num_adapter,
+                                      loop=True, 
+                                      name =  "comic_", 
+                                      oracles= clipart_cl, 
+                                      train_baseline= train_baseline,
+                                       writing = writing)
+    print(psnr,"  ",bpp)
+    """
+    print("****************************************** PAINTING***************************************+++*************************")
+    if "painting" not in args.considered_classes:
+        cons_classes = args.considered_classes + ["painting"]
+    else:
+        cons_classes = args.considered_classes
+    painting = AdapterDataset(root = args.root, path  =  ["test_painting.txt"],classes = cons_classes, transform = test_transforms,train = False)
+    painting_f = painting.samples
+    painting_filelist = []
+    painting_cl = [] if oracle else None
+    for i in range(len(painting_f)):
+        painting_filelist.append(painting_f[i][0])
+        if oracle:
+            painting_cl.append(int(painting_f[i][1]))
+    psnr, bpp = compress_with_ac_gate(model, 
+                                      painting_filelist, 
+                                      device, 
+                                      epoch, 
+                                      num_adapter,
+                                      loop=True, 
+                                      name =  "painting_", 
+                                      oracles= painting_cl, 
+                                      train_baseline= train_baseline,
+                                       writing = writing)
+    print(psnr,"  ",bpp)
+
+
+    print("****************************************** INFOGRAPH ****************************************************************")
+    
+    if "infograph" not in args.considered_classes:
+        cons_classes = args.considered_classes + ["infograph"]
+    else:
+        cons_classes = args.considered_classes
+    infograph = AdapterDataset(root = args.root, path  =  ["test_infograph.txt"],classes = cons_classes, transform = test_transforms,train = False)
+
+
+    infograph_f = infograph.samples
+    infograph_filelist = []
+    infograph_cl = [] if oracle else None
+    for i in range(len(infograph_f)):
+        infograph_filelist.append(infograph_f[i][0])
+        if oracle:
+            infograph_cl.append(int(infograph_f[i][1]))
+    psnr, bpp = compress_with_ac_gate(model, 
+                                      infograph_filelist, 
+                                      device, 
+                                      epoch, 
+                                      num_adapter,
+                                      loop=True, 
+                                      name =  "infograph_", 
+                                      oracles= infograph_cl, 
+                                      train_baseline= train_baseline,
+                                       writing = writing)
+    print(psnr,"  ",bpp)
+
     """
     print("****************************************** sketch ****************************************************************")
-    sketch = AdapterDataset(root = args.root, path  =  ["test_sketch.txt"], transform = test_transforms)
+    if "sketch" not in args.considered_classes:
+        cons_classes = args.considered_classes + ["sketch"]
+    else:
+        cons_classes = args.considered_classes
+    sketch = AdapterDataset(root = args.root + "/test", path  =  ["_sketch_.txt"],classes = cons_classes, num_element = 20, transform = test_transforms)
     sketch_f = sketch.samples
     sketch_filelist = []
     sketch_cl = [] if oracle else None
@@ -508,45 +620,29 @@ def evaluate_base_model_gate(model, args,device, epoch,num_adapter, oracle, trai
                                       train_baseline= train_baseline,
                                       writing = writing)
     print(psnr,"  ",bpp)
-    """
-    print("****************************************** clipart **************************************************************4444**")
-    clipart = AdapterDataset(root = args.root, path  =  ["test_clipart.txt"],classes = args.considered_classes, transform = test_transforms,train = False)
-    clipart_f = clipart.samples
-    clipart_filelist = []
-    clipart_cl = [] if oracle else None
-    for i in range(len(clipart_f)):
-        clipart_filelist.append(clipart_f[i][0])
+    print("****************************************** water ****************************************************************")
+    if "watercolor" not in args.considered_classes:
+        cons_classes = args.considered_classes + ["watercolor"]
+    else:
+        cons_classes = args.considered_classes
+    sketch = AdapterDataset(root = args.root + "/test", path  =  ["_watercolor_.txt"],classes = cons_classes , num_element = 20, transform = test_transforms)
+    sketch_f = sketch.samples
+    sketch_filelist = []
+    sketch_cl = [] if oracle else None
+    for i in range(len(sketch_f)):
+        sketch_filelist.append(sketch_f[i][0])
         if oracle:
-            clipart_cl.append(int(clipart_f[i][1]))
+            sketch_cl.append(int(sketch_f[i][1]))
     psnr, bpp = compress_with_ac_gate(model, 
-                                      clipart_filelist, 
+                                      sketch_filelist, 
                                       device, 
                                       epoch, 
                                       num_adapter,
-                                      loop=True, 
-                                      name =  "clipart_", 
-                                      oracles= clipart_cl, 
-                                      train_baseline= train_baseline,
-                                       writing = writing)
-    print(psnr,"  ",bpp)
 
-    print("****************************************** PAINTING***************************************+++*************************")
-    painting = AdapterDataset(root = args.root, path  =  ["test_painting.txt"],classes = args.considered_classes, transform = test_transforms,train = False)
-    painting_f = painting.samples
-    painting_filelist = []
-    painting_cl = [] if oracle else None
-    for i in range(len(painting_f)):
-        painting_filelist.append(painting_f[i][0])
-        if oracle:
-            painting_cl.append(int(painting_f[i][1]))
-    psnr, bpp = compress_with_ac_gate(model, 
-                                      painting_filelist, 
-                                      device, 
-                                      epoch, 
-                                      num_adapter,
                                       loop=True, 
-                                      name =  "painting_", 
-                                      oracles= painting_cl, 
+                                      name= "water_",
+                                      oracles = sketch_cl, 
                                       train_baseline= train_baseline,
-                                       writing = writing)
+                                      writing = writing)
     print(psnr,"  ",bpp)
+    

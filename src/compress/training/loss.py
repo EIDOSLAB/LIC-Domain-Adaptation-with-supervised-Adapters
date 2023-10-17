@@ -121,7 +121,7 @@ class AdaptersLoss(nn.Module):
         num_pixels = N * H * W
     
            
-        out["CrossEntropy"] = out["CrossEntropy"] = self.loss(output["logits"], target[1]).to("cuda")
+        out["CrossEntropy"] =  self.loss(output["logits"], target[1]).to("cuda")
 
         out["y_bpp"] = torch.log(output["likelihoods"]["y"]).sum() / (-math.log(2) * num_pixels)
         out["z_bpp"]  = torch.log(output["likelihoods"]["z"]).sum() / (-math.log(2) * num_pixels) 
@@ -132,6 +132,33 @@ class AdaptersLoss(nn.Module):
         return out
 
 
+from pytorch_msssim import ms_ssim
+
+class MssimLoss(nn.Module):
+    """Custom rate distortion loss with a Lagrangian parameter."""
+
+    def __init__(self ):
+        super().__init__()
+
+        self.metric = ms_ssim
+        self.loss = nn.CrossEntropyLoss()
+  
+
+    def forward(self, output, target):
+        N, _, H, W = target[0].size()
+        out = {}
+        num_pixels = N * H * W
+
+        out["bpp_loss"] = sum((torch.log(likelihoods).sum() / (-math.log(2) * num_pixels))for likelihoods in output["likelihoods"].values())
+
+        out["mse_loss"] = self.metric(output["x_hat"], target[0], data_range=1)
+        distortion = 1 - out["mse_loss"]
+
+
+
+
+        out["loss"] =  32*distortion 
+        return out
 
 
 

@@ -31,6 +31,13 @@ def from_state_dict(cls, state_dict):
 
 
 
+def read_image(filepath):
+    #assert filepath.is_file()
+    img = Image.open(filepath)
+    img = img.convert("RGB")
+    return img
+
+
 def get_model_for_evaluation(model, pret_checkpoint, device):
 
 
@@ -101,7 +108,7 @@ IMG_EXTENSIONS = (
 def read_image(filepath):
     #assert filepath.is_file()
     img = Image.open(filepath)
-    img = img.resize(i)
+
     img = img.convert("RGB")
     return transforms.ToTensor()(img) 
 
@@ -142,31 +149,81 @@ def main(argv):
 
 
 
-    root = "/scratch/dataset/DomainNet/splitting/mixed"
-    #path_models = "/scratch/KD/devil2022/adapter/3_classes/q5"
-    path_models = "/scratch/universal-dic/weights/q5"
 
+    #path_models = "/scratch/universal-dic/weights/q2"
+    bam_path = "/scratch/dataset/bam_dataset/splitting/vector-art.txt"
+    bam = "/scratch/dataset/bam_dataset/bam/"
+
+    root = "/scratch/dataset/DomainNet/splitting/mixed/test"
     test_transforms = transforms.Compose([transforms.ToTensor()])
-    print("****************************************** PAINTING***************************************+++*************************")
-    painting = AdapterDataset(root = root, path  =  ["test_infograph.txt"], transform = test_transforms,train = False)
+    print("****************************************** PAINTING****************************************************************")
+    painting = AdapterDataset(root = root, path  =  ["test_quickdraw.txt"], transform = test_transforms,train = False, num_element=300)
     painting_f = painting.samples
     painting_filelist = []
+
+    file_d = open(bam_path,"r") 
+    Lines = file_d.readlines()
+
+
+    #for i,lines in enumerate(Lines):
+    #    painting_filelist.append(bam + lines[:-1])
+
+
 
     for i in range(len(painting_f)):
         painting_filelist.append(painting_f[i][0])
 
+    print(len(painting_filelist))
 
 
+
+    """
+    save_image_path = "/scratch/KD/devil2022/results/reconstructions/infograph/original/"
+    for fl in painting_filelist:
+        img =  Image.open(fl)
+        name = fl.split("/")[-1]
+        img.save(save_image_path + name) 
+    
+    """
+    print("fatto!!!!")
+
+   
+
+
+
+
+
+    save_images =None #"/scratch/KD/devil2022/results/reconstructions/quickdraw/adapters/q2"
+    writing = None #"/scratch/KD/devil2022/results/writings/quickdraw/adapters/q2/"
+
+    
+    path_models = "/scratch/KD/devil2022/adapter/3_classes/q5"
+    
+    list_models = [os.path.join(path_models,f) for f in os.listdir(path_models)]
+    mode = "gate"
+    for m in list_models:
+
+        net = get_model_for_evaluation(mode,m,device)
+        if mode == "gate":
+            psnr, bpp = compress_with_ac_gate(net, 
+                                        painting_filelist, 
+                                        device, 
+                                        -1, 
+                                        3,
+                                        loop=False, 
+                                        name =  "quickdraw_", 
+                                        oracles= None, 
+                                        train_baseline= False,
+                                        writing =writing,
+                                        save_images = save_images)
+        else:
+            psnr,bpp =  compress_with_ac(net, painting_filelist, device, -1, loop=False,name =  "quickdraw_",  save_images = save_images, writing = writing)
+        print(mode,": ",psnr,"  ",bpp)
 
 
     
-
-
-
-
-
-
-
+    path_models ="/scratch/universal-dic/weights/q5"
+    
     list_models = [os.path.join(path_models,f) for f in os.listdir(path_models)]
     mode = "base"
     for m in list_models:
@@ -179,14 +236,14 @@ def main(argv):
                                         -1, 
                                         3,
                                         loop=False, 
-                                        name =  "infograph_", 
+                                        name =  "quickdraw_", 
                                         oracles= None, 
                                         train_baseline= False,
-                                        writing = None)
+                                        writing =writing,
+                                        save_images = save_images)
         else:
-            psnr,bpp =  compress_with_ac(net, painting_filelist, device, -1, loop=False)
-            print(psnr,"  ",bpp)
-
+            psnr,bpp =  compress_with_ac(net, painting_filelist, device, -1, loop=False,name =  "quickdraw_",  save_images = save_images, writing = writing)
+        print(mode,": ",psnr,"  ",bpp)  
 
 
 

@@ -19,146 +19,16 @@ from PIL import Image
 from torch.utils.data import Dataset
 import torch.nn.functional as F
 from random import sample, seed, shuffle
-from os.path import exists
-class SquarePad:
-    def __init__(self, patch_size) -> None:
-        self.max_patch = max(patch_size[0], patch_size[1])
-    def __call__(self, image):
-        w, h = image.size
-        max_wh = max(w, h)
-        max_wh = max(max_wh, self.max_patch)
-        hp = int((max_wh - w) / 2)+1
-        vp = int((max_wh - h) / 2)+1
-        padding = (hp, vp, hp, vp)
-        return F.pad(image, padding,  0,  'constant')
-
-
-
-
-class DomainNet(Dataset):
-
-    def __init__(self, root, transform = None, type = "sketch", split = "train"): 
-        
-        
-        
-        if exists(Path(root) /  "splitting" / type / "train_images.txt") and exists(Path(root) /  "splitting" / type / "valid_images.txt") and exists(Path(root) /  "splitting" / type / "test_images.txt"):
-            print("ho gia fatto la divisione!!!!!")
-            first_time = False
-        else: 
-            first_time = True
-        
-
-
-
-        if split == "train":
-            if  first_time:
-                name =  "nuovo_train.txt"
-            else: 
-                name =  "train_images.txt"
-            file_splitdir = Path(root) /  "splitting" / type / name
-        elif split == "valid":
-            if  first_time:
-                name =  "nuovo_test.txt"
-            else: 
-                name =  "valid_images.txt"
-            file_splitdir = Path(root) /  "splitting" / type / name
-        else:
-            if  first_time:
-                name =  "nuovo_test.txt"
-            else: 
-                name =  "test_images.txt"
-            file_splitdir = Path(root) /  "splitting" / type / name           
-
-
-        #data_dir =  Path(root) / "data" 
-
-
-
-
-        file1 = open(file_splitdir, 'r')
-        Lines = file1.readlines()
-
-
-
-
-        self.samples =[]
-        
-        for i,line in enumerate(Lines):
-            if i%10000==0:
-                print(i)
-            f_temp = line.strip().split(" ")[0]
-            #path = os.path.join(line)
-
-            if first_time:
-                img_t = Image.open(f_temp)
-
-                l,w = img_t.size
-                if l < 284 or w < 284:
-                    continue
-            
-
-
-
-                    
-                else:     
-
-
-                    if split == "train":
-                        fls = Path(root) /  "splitting" / type /  "train_images.txt"
-                    elif split == "valid": 
-                        fls = Path(root) /  "splitting" / type /  "valid_images.txt"
-                    else: 
-                        fls = Path(root) /  "splitting" / type /  "test_images.txt"
-                    
-                    f=open(fls , "a+")
-
-
-
-
-                    if split == "train":
-                        self.samples.append(f_temp)
-                        f.write( f_temp+ "\n")
-                        f.close()  
-                    elif split == "valid":
-                        self.samples.append(f_temp)
-
-                        f.write( f_temp + "\n")
-                        f.close()
-                        if i % 300 == 0:
-                            self.samples.append(f_temp)
-                            #f.write( f_temp + "\n")
-                            #f.close()
-                        
-                    elif split == "test":
-                        if i % 401 == 0:
-                            self.samples.append(f_temp)
-                            f.write( f_temp + "\n")
-                            f.close()
-            else: 
-                f_temp = line.strip().split(" ")[0]
-                self.samples.append(f_temp)
-
-
-
-
-        print("lunghezza: ",len(self.samples)," ", split)
-        if split == "valid":
-            self.samples = sample(self.samples, 2048)     
-        print("lunghezza: ",len(self.samples)," ", split)
-        self.transform = transform       
-
-    def __getitem__(self, index):
-
-        img = Image.open(self.samples[index]).convert("RGB")
-        if self.transform:
-            return self.transform(img)
-        return img
-
-    def __len__(self):
-        return len(self.samples)
-    
 import random
-from itertools import permutations
+
+
+
+
+
+
+    
+
+
 class ImageFolder(Dataset):
 
 
@@ -290,37 +160,6 @@ def  handle_dataset(args,device):
         return train_dataloader, valid_dataloader, test_dataloader, filelist
 
 
-    elif args.dataset_type == "domain":
-        print("DOMAIN DATASET")
-
-
-
-
-
-        train_transforms = transforms.Compose([ transforms.RandomCrop(args.patch_size), transforms.ToTensor()])
-
-        valid_transforms = transforms.Compose([ transforms.CenterCrop(args.patch_size), transforms.ToTensor()])
-
-        test_transforms = transforms.Compose([  transforms.CenterCrop(size = args.patch_size) ,transforms.ToTensor()])
-
-
-    
-        train_dataset = DomainNet(root = "/scratch/dataset/DomainNet", split="train", transform=train_transforms, type = args.keyfold_dataset )
-        train_dataloader = DataLoader(train_dataset,batch_size=args.batch_size,num_workers=args.num_workers,shuffle=True, pin_memory=(device == "cuda"),)
-
-
-        valid_dataset = DomainNet(root = "/scratch/dataset/DomainNet", split="valid", transform=valid_transforms, type = args.keyfold_dataset)
-        valid_dataloader = DataLoader(valid_dataset,batch_size=args.batch_size,num_workers=args.num_workers,shuffle=False,pin_memory=(device == "cuda"),)
-
-
-        
-
-        test_dataset =  DomainNet(root = "/scratch/dataset/DomainNet", split="test", transform= test_transforms, type = args.keyfold_dataset)
-        test_dataloader = DataLoader(test_dataset, batch_size=1,num_workers=args.num_workers,shuffle=False,pin_memory=(device == "cuda"),)
-
-        filelist = test_dataset.samples
-
-        return train_dataloader, valid_dataloader, test_dataloader, filelist
 
 
 
@@ -329,7 +168,7 @@ class AdapterDataset(Dataset):
 
 
 
-    def __init__(self, root, path=["train.txt"], transform = None, classes = ["openimages","sketch","clipart","painting","infograph"], num_element = 20000, train = True):
+    def __init__(self, root, path=["train.txt"], transform = None, classes =  ["natural","sketch","watercolor","comic","infographics","quickdraw"], num_element = 2000, train = True):
 
 
 
@@ -338,7 +177,7 @@ class AdapterDataset(Dataset):
         self.samples =[]# [f for f in splitdir.iterdir() if f.is_file()]   
         for p in path:
 
-            splitdir = Path(root) / p
+            splitdir = root + "/" + p
 
             file_d = open(splitdir,"r") 
             Lines = file_d.readlines()
@@ -353,10 +192,12 @@ class AdapterDataset(Dataset):
                 self.class_label["clic"] = 0
 
                 for i,cl in enumerate(classes):
-                    if cl != "openimages":
+                    if cl != "natural" or cl != "openimages":
                         self.class_label[cl] = i
 
-            print("££££££££££££££££££££$$$£££v ",self.class_label)
+            print("print the labels ",self.class_label)
+
+            
 
             
 
@@ -364,8 +205,15 @@ class AdapterDataset(Dataset):
             for cl in list(self.class_label.keys()):
                 counter = 0
                 for i,lines in enumerate(Lines):
-                    if cl in lines and counter < num_element:
-                        self.samples.append((lines.split(" ")[0], str(self.class_label[cl])))
+                    
+                    #spec_num_element = num_element if cl == "openimages" else num_element
+                    if cl in lines and counter <num_element: #splitdir
+                        
+                        if "kodak" not in cl and "clic" not in cl:
+                            ln = lines.split(" ")[0][:-1]
+                        else: 
+                            ln = lines.split(" ")[0]
+                        self.samples.append((ln, str(self.class_label[cl])))
                         counter +=1
                         if i % 10000==0:
                             print(i," ", self.samples[-1])
@@ -382,7 +230,11 @@ class AdapterDataset(Dataset):
                         cont_painting +=1
                     """  
 
-        shuffle(self.samples)
+        #shuffle(self.samples)
+
+
+        #self.samples = self.samples[:100]
+        print(self.samples[:5])
         print("lunghezza: ",len(self.samples))
         self.transform = transform
 
@@ -399,23 +251,19 @@ class AdapterDataset(Dataset):
     
 
 
+from sklearn.model_selection import train_test_split
 
-
-def create_data_file_for_multiple_adapters(classes = {"infograph":4},
-                                            split = "valid", 
+def create_data_file_for_multiple_adapters(classes = ["quickdraw"], #"natural""natural","comic",
+                                            split = "test", 
                                            savepath = "/scratch/dataset/DomainNet/splitting/mixed",
-                                           num_im_per_class = 1016,
-                                           random_seed = 42):
-   
-    if split == "train":
-        fls = savepath + "/" + split + ".txt"
-    else: 
-        fls = savepath + "/" + "valid_infograph" + ".txt"
-    f=open(fls , "a+")
-
+                                           num_im_per_class = 200,
+                                    random_seed = 42):
     seed(random_seed)
-    for i,cl in enumerate(list(classes.keys())):
-        print("**********************  CLASSE: ",cl)
+    for (j,cl) in enumerate(classes):
+        print("______________________ ",cl,"___________________________________________")
+        fls = savepath + "/" + split + "/_" + cl +  "_.txt"
+        f=open(fls , "a+")
+
         if cl == "natural":
             if split == "train":
                 pth = "/scratch/dataset/openimages/train/data"
@@ -426,38 +274,100 @@ def create_data_file_for_multiple_adapters(classes = {"infograph":4},
 
             for single_images in immagini_train:
                 f=open(fls , "a+")
-                f.write( single_images + " " + str(classes[cl]) + "\n")
+                f.write( single_images + "\n")
                 f.close()  
-        elif cl in ("sketch","clipart","painting","infograph"):
+        elif cl  in ("quickdraw"):
 
 
-            pth = "/scratch/dataset/DomainNet/splitting/" + cl  + "/total_" + split + ".txt"
+            pth = "/scratch/dataset/DomainNet/splitting/" + cl  +  "/total_test.txt"
             file_d = open(pth,"r") 
             Lines = file_d.readlines()
             immagini_pox = []
             for i,line in enumerate(Lines):
                 if i%10000==0:
                     print(i)
-                f_temp = "/scratch/dataset/DomainNet/data/" + line.strip().split(" ")[0]
+                f_temp =  "/scratch/dataset/DomainNet/data/"  + line.split(" ")[0]
                 #path = os.path.join(line)
 
                 img_t = Image.open(f_temp)
 
                 l,w = img_t.size
-                if l > 284 and w > 284:
+
+                if l > 256 and w > 256:
                     immagini_pox.append(f_temp) # + " " + str(classes[cl]) + "\n")
-                    #f=open(fls , "a+")
-                    #f.write( f_temp + " " + str(classes[cl]) + "\n")
-                    #f.close() 
-            
-            immagini_train = sample(immagini_pox,num_im_per_class + 1)
+                        #f=open(fls , "a+")
+                        #f.write( f_temp + " " + str(classes[cl]) + "\n")
+                        #f.close() 
+                else:
+                    print("queste dimensioni non vanno bene: ",l,w)
+            numero_fin = min(num_im_per_class, len(immagini_pox))
+            print("-------> ",numero_fin)
+            immagini_train = sample(immagini_pox,numero_fin)
 
             for files in immagini_train:
                 f=open(fls , "a+")
-                f.write(files  + " " + str(classes[cl]) + "\n")
-                f.close()                
+                f.write(files  + "\n")
+                f.close()    
+        else: # infographics e sketch qua devo fare tutto insieme perché altrimenti non è chiaro 
+            print("-----------------> ",cl)
+            
+            # prendo lista tutti i fil 
+            pth = "/scratch/dataset/domain_adapter/" + cl  + "/JPEGImages"
+            print("inizio listato")
+            tutti_i_file = [os.path.join(pth,f) for f in os.listdir(pth) if rispetto_dimensioni(pth,f) is True]
+            print(len(tutti_i_file))
+            numero_fin = min(num_im_per_class, len(tutti_i_file))
+            immagini_train = sample(tutti_i_file,numero_fin)
+
+            print("Inizio random")
+            # Dividi la lista in tre parti
+            train, rimanente = train_test_split(tutti_i_file, train_size=0.9, shuffle=True)
+            valid, test = train_test_split(rimanente, train_size=0.9, shuffle=True)
+
+            # Stampa le tre parti
+            print("Prima parte:", len(train))
+            print("Seconda parte:", len(valid))
+            print("Terza parte:", len(test))
 
 
+            fls = savepath + "/" + "train" + "/_" + cl +  "_.txt"
+            for files in train:
+                f=open(fls , "a+")
+                f.write(files  + "\n")
+                f.close()   
+        
+            fls = savepath + "/" + "valid" + "/_" + cl +  "_.txt"
+            for files in valid:
+                f=open(fls , "a+")
+                f.write(files  + "\n")
+                f.close()   
+            
+            fls = savepath + "/" + "test" + "/_" + cl +  "_.txt"
+            for files in valid:
+                f=open(fls , "a+")
+                f.write(files  + "\n")
+                f.close()   
+
+
+            
+
+
+
+
+
+
+
+
+                        
+
+def rispetto_dimensioni(pth,f):
+    with Image.open(os.path.join(pth,f)) as img_t:
+
+        l,w = img_t.size
+        if l > 256 and w > 256:   
+            return True 
+        else:
+            return False
 
 def build_test_datafile(type = "infograph", savepath = "/scratch/dataset/DomainNet/splitting/mixed/"):
     if type in ("kodak","clic"):

@@ -220,9 +220,9 @@ def test_epoch(epoch, test_dataloader, model, criterion,  valid):
 
 
 from compressai.ops import compute_padding
+import os
 
-
-def compress_with_ac(model,  filelist, device, epoch, name = "",loop = True,  writing = None ):
+def compress_with_ac(model,  filelist, device, epoch, name = "",loop = True,  writing = None, save_images = None ):
     #model.update(None, device)
     print("ho finito l'update")
     bpp_loss = AverageMeter()
@@ -250,6 +250,14 @@ def compress_with_ac(model,  filelist, device, epoch, name = "",loop = True,  wr
 
             out_dec["x_hat"].clamp_(0.,1.)     
 
+            if save_images is not None:
+
+
+                image = transforms.ToPILImage()(out_dec['x_hat'].squeeze())
+                nome_salv = os.path.join(save_images, nome_immagine + ".png")
+                image.save(nome_salv)
+
+
 
             # parte la prova, devo controllare che y_hat sia sempre uguale!!!!! 
             #out = model.forward(x)
@@ -276,7 +284,7 @@ def compress_with_ac(model,  filelist, device, epoch, name = "",loop = True,  wr
             bpp_loss.update(bpp)
 
             if writing is not None:
-                fls = writing + ".txt"
+                fls = writing + name + ".txt"
                 f=open(fls , "a+")
                 f.write("SEQUENCE "  +   nome_immagine + " BITS " +  str(bpp) + " PSNR " +  str(psnr_im)  + " MSSIM " +  str(ms_ssim_im) + "\n")
                 f.close()  
@@ -303,7 +311,7 @@ def compress_with_ac(model,  filelist, device, epoch, name = "",loop = True,  wr
     
     if writing is not None:
 
-        fls = writing + ".txt"
+        fls = writing + name + ".txt"
         f=open(fls , "a+")
         f.write("SEQUENCE "  +   "AVG " + "BITS " +  str(bpp_loss.avg) + " YPSNR " +  str(psnr_val.avg)  + " YMSSIM " +  str(mssim_val.avg) + "\n")
 

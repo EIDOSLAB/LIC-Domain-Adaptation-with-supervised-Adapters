@@ -110,15 +110,12 @@ class ResidualMultipleAdaptersDeconv(nn.Module):
 
     def initialization(self,m):
         if isinstance(m, nn.Conv2d) or isinstance(m,nn.Linear) or isinstance(m, nn.ConvTranspose2d) :
-            nn.init.normal_(m.weight, mean=self.mean, std=self.standard_deviation)
+            torch.nn.init.zeros_(m.weight) #nn.init.normal_(m.weight, mean=self.mean, std=self.standard_deviation)
             if m.bias is not None:
                 torch.nn.init.zeros_(m.bias) 
 
 
-    def forward(self,x, gate_prob, oracle):
-
-        x_conv = self.original_model_weights(x)
-
+    def extract_prob_distribution(self,gate_prob, oracle):
         if oracle is None:
             argmax = torch.argmax(gate_prob, dim = 1)
         else:
@@ -139,6 +136,14 @@ class ResidualMultipleAdaptersDeconv(nn.Module):
         else: 
             raise ValueError("Per ora non ho implementato altro!!!!!!!")
 
+        return gate_prob
+
+
+    def forward(self,x, gate_prob, oracle):
+
+        x_conv = self.original_model_weights(x)
+
+        gate_prob = self.extract_prob_distribution(gate_prob, oracle)
 
 
             
@@ -146,10 +151,8 @@ class ResidualMultipleAdaptersDeconv(nn.Module):
         summed_out = x.unsqueeze(1).repeat(1,self.num_adapter,1,1,1) # [16,3,192,18,24] #torch.sum(torch.stack([self.adapters[i](out)*gate_prob[i] for i in range(self.num_adapter)], dim = 1),dim = 1) 
         ad_summed_out = torch.stack([self.adapters[i](summed_out[:,i,:,:,:]) for i in range(self.num_adapter)], dim = 1)
         ad_summed_out = ad_summed_out*gate_prob[:,:,None,None,None]
-         
+     
         x_adapt = torch.sum(ad_summed_out, dim =1) #[16,192,18,24]
-            
-        #x_adapt = torch.sum(torch.stack([self.adapters[i](x)*gate_prob[i] for i in range(self.num_adapter)], dim = 1),dim = 1)
         return x_conv + x_adapt 
 
 
@@ -415,7 +418,7 @@ class ResidualBlockMultipleAdapters(ResidualBlock):
 
     def initialization(self,m):
         if isinstance(m, nn.Conv2d) or isinstance(m,nn.Linear) or isinstance(m, nn.ConvTranspose2d) :
-            nn.init.normal_(m.weight, mean=self.mean, std=self.standard_deviation)
+            torch.nn.init.zeros_(m.weight) #nn.init.normal_(m.weight, mean=self.mean, std=self.standard_deviation)
             if m.bias is not None:
                 torch.nn.init.zeros_(m.bias) 
 
@@ -500,7 +503,7 @@ class ResidualBlockUpsampleMultipleAdapters(ResidualBlockUpsample):
         
     def initialization(self,m):
         if isinstance(m, nn.Conv2d) or isinstance(m,nn.Linear) or isinstance(m, nn.ConvTranspose2d) :
-            nn.init.normal_(m.weight, mean=self.mean, std=self.standard_deviation)
+            torch.nn.init.zeros_(m.weight) #nn.init.normal_(m.weight, mean=self.mean, std=self.standard_deviation)
             if m.bias is not None:
                 torch.nn.init.zeros_(m.bias)    
 
@@ -599,7 +602,7 @@ class subpel_conv3x3MultipleAdapters(nn.Module):
         
     def initialization(self,m):
         if isinstance(m, nn.Conv2d) or isinstance(m,nn.Linear) or isinstance(m, nn.ConvTranspose2d) :
-            nn.init.normal_(m.weight, mean=self.mean, std=self.standard_deviation)
+            torch.nn.init.zeros_(m.weight) #nn.init.normal_(m.weight, mean=self.mean, std=self.standard_deviation)
             if m.bias is not None:
                 torch.nn.init.zeros_(m.bias)    
 
@@ -782,7 +785,7 @@ class ResidualAdapterDeconv(nn.Module):
     def initialization(self,m):
         if isinstance(m, nn.Conv2d) or isinstance(m,nn.Linear) or isinstance(m, nn.ConvTranspose2d) :
             print("sono entrato qua per inizialissssszzare split connections E SONO QUA DENTRO CON 0")
-            nn.init.normal_(m.weight, mean=self.mean, std=self.standard_deviation)
+            torch.nn.init.zeros_(m.weight) #nn.init.normal_(m.weight, mean=self.mean, std=self.standard_deviation)
             if m.bias is not None:
                 torch.nn.init.zeros_(m.bias)       
     

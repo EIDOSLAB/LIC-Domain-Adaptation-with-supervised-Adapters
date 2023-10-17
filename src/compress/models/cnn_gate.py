@@ -95,7 +95,6 @@ class WACNNGateAdaptive(WACNN):
 
     def handle_gate_parameters(self, re_grad = True):
         for n,p in self.gate.named_parameters():
-            print("sblocco gate: ",n)
             p.requires_grad = re_grad
 
 
@@ -107,7 +106,6 @@ class WACNNGateAdaptive(WACNN):
         for n,p in self.g_s.named_parameters(): 
                 #if "skipped" not in n:
                 if "adapter_" in n or "AttentionAdapter" in n:
-                    print("sto sbloccando gli adapter: ",n)
                     p.requires_grad = re_grad 
 
 

@@ -3,8 +3,8 @@ import sys
 import wandb
 import torch
 import torch.optim as optim
-from compress.training import train_one_epoch_gate, test_epoch_gate, DistorsionLoss,GateLoss, compress_with_ac, RateDistortionLoss,AdaptersLoss,GateDistorsionLoss, DistorsionLoss, evaluate_base_model_gate
-from compress.datasets import   AdapterDataset
+from compress.training import train_one_epoch_gate, test_epoch_gate, DistorsionLoss,GateLoss, MssimLoss, compress_with_ac,AdaptersLoss,GateDistorsionLoss, DistorsionLoss, evaluate_base_model_gate
+from compress.datasets import   AdapterDataset, ImageFolder,  TestKodakDataset
 from compress.utils.help_function import  configure_optimizers,  create_savepath, save_checkpoint_our, sec_to_hours, set_seed
 from compress.utils.parser import parse_args_gate
 import time
@@ -65,39 +65,100 @@ def evaluate_base_model(model, args,device):
     print(psnr,"  ",bpp)
     """
 
-    print("****************************************** PAINTING ****************************************************************")
-    painting = AdapterDataset(root = args.root, path  =  ["test_painting.txt"], classes = args.considered_classes, transform = test_transforms)
+    print("****************************************** SKETCH ****************************************************************")
+    painting = AdapterDataset(root = args.root + "/test", 
+                              path  =  ["_sketch_.txt"],
+                              classes = args.considered_classes, 
+                              transform = test_transforms,
+                               num_element = 20,
+                              train = False)
     painting_f = painting.samples
     painting_filelist = []
     for i in range(len(painting_f)):
         painting_filelist.append(painting_f[i][0])
-    psnr, bpp = compress_with_ac(model, painting_filelist, device, -1, loop=False, writing= args.writing + "painting_")
+    psnr, bpp = compress_with_ac(model, painting_filelist, device, -1, loop=False, writing= args.writing + "sketch_")
     print(psnr,"  ",bpp)
 
+
+    print("******************************************  COMIC ****************************************************************")
+    painting = AdapterDataset(root = args.root + "/test", 
+                              path  =  ["_comic_.txt"],
+                              classes = args.considered_classes + ["comic"],
+                                transform = test_transforms,
+                                num_element=20,
+                                train = False)
+    painting_f = painting.samples
+    painting_filelist = []
+    for i in range(len(painting_f)):
+        painting_filelist.append(painting_f[i][0])
+    psnr, bpp = compress_with_ac(model, painting_filelist, device, -1, loop=False, writing= args.writing + "comic_")
+    print(psnr,"  ",bpp)
+    print("******************************************  KODAK ****************************************************************")
+    painting = AdapterDataset(root = args.root + "/test", 
+                              path  =  ["_kodak_.txt"],
+                              classes = args.considered_classes,
+                                transform = test_transforms,
+                                num_element=20,
+                                train = False)
+    painting_f = painting.samples
+    painting_filelist = []
+    for i in range(len(painting_f)):
+        painting_filelist.append(painting_f[i][0])
+    psnr, bpp = compress_with_ac(model, painting_filelist, device, -1, loop=False, writing= args.writing + "kodak_")
+    print(psnr,"  ",bpp)
+
+    print("******************************************  INFO ****************************************************************")
+    painting = AdapterDataset(root = args.root + "/test", 
+                              path  =  ["_infographics_.txt"],
+                              classes = args.considered_classes,
+                                transform = test_transforms,
+                                num_element=20,
+                                train = False)
+    painting_f = painting.samples
+    painting_filelist = []
+    for i in range(len(painting_f)):
+        painting_filelist.append(painting_f[i][0])
+    psnr, bpp = compress_with_ac(model, painting_filelist, device, -1, loop=False, writing= args.writing + "infographics_")
+    print(psnr,"  ",bpp)
+    print("******************************************  INFO ****************************************************************")
+    painting = AdapterDataset(root = args.root + "/test", 
+                              path  =  ["_watercolor_.txt"],
+                              classes = args.considered_classes  + ["watercolor"],
+                                transform = test_transforms,
+                                num_element=20,
+                                train = False)
+    painting_f = painting.samples
+    painting_filelist = []
+    for i in range(len(painting_f)):
+        painting_filelist.append(painting_f[i][0])
+    psnr, bpp = compress_with_ac(model, painting_filelist, device, -1, loop=False, writing= args.writing + "watercolor_")
+    print(psnr,"  ",bpp)
 
 def handle_trainable_pars(net, args, epoch):
     net.freeze_net()
     if args.train_baseline is False:
 
-        if args.training_policy == "gate":
-            print("porca troia ")
-            net.handle_gate_parameters()
-        elif args.training_policy in ("e2e","e2e_mse"): #and args.starting_epoch < epoch:
-            net.handle_gate_parameters()
-            if args.starting_epoch < epoch:
-                net.handle_adapters_parameters()
-        elif args.training_policy == "adapter":
+        if args.ms_ssim is True or args.oracle is True:
             net.handle_adapters_parameters()
-        elif args.training_policy == "fgta":
-            if args.starting_epoch > epoch:
-                print("solo il gate")
-                net.handle_gate_parameters(re_grad = True)
-                net.handle_adapters_parameters(re_grad = False)
-            else:
-                net.handle_gate_parameters(re_grad = False)
-                net.handle_adapters_parameters(re_grad = True)
         else:
-            raise ValueError("unrecognized policy")
+            if args.training_policy == "gate":
+                net.handle_gate_parameters()
+            elif args.training_policy in ("e2e","e2e_mse"): #and args.starting_epoch < epoch:
+                net.handle_adapters_parameters()
+                if epoch < args.starting_epoch:
+                    net.handle_gate_parameters()
+            elif args.training_policy == "adapter":
+                net.handle_adapters_parameters()
+            elif args.training_policy == "fgta":
+                if args.starting_epoch > epoch:
+                    print("solo il gate")
+                    net.handle_gate_parameters(re_grad = True)
+                    net.handle_adapters_parameters(re_grad = False)
+                else:
+                    net.handle_gate_parameters(re_grad = False)
+                    net.handle_adapters_parameters(re_grad = True)
+            else:
+                raise ValueError("unrecognized policy")
     else: 
         net.pars_decoder(starting = 5)  
 
@@ -115,7 +176,7 @@ def from_state_dict(cls, state_dict):
     net.load_state_dict(state_dict)
     return net
 
-def get_gate_model(args,device):
+def get_gate_model(args,num_adapter, device):
 
     if args.name_model == "cheng":
         
@@ -144,11 +205,11 @@ def get_gate_model(args,device):
                                 padding_attn = args.padding_attn,
                                 type_adapter_attn = args.type_adapter_attn,
                                 position_attn = args.position_attn,
-                                num_adapter = args.num_adapter,
+                                num_adapter = num_adapter,
                                 aggregation = args.aggregation,
                                 std = args.std,
                                 mean = args.mean,                              
-                                bias = args.bias,
+                                bias = True,
 
         )
 
@@ -194,11 +255,11 @@ def get_gate_model(args,device):
                                 padding_attn = args.padding_attn,
                                 type_adapter_attn = args.type_adapter_attn,
                                 position_attn = args.position_attn,
-                                num_adapter = args.num_adapter,
+                                num_adapter = num_adapter,
                                 aggregation = args.aggregation,
                                 std = args.std,
                                 mean = args.mean,                              
-                                bias = args.bias,
+                                bias = True,
                                 skipped = args.skipped
                                     ) 
 
@@ -235,31 +296,37 @@ def main(argv):
     set_seed(seed = args.seed)
     device = "cuda" if  torch.cuda.is_available() else "cpu"
 
+
+    # numero di classsi
+
+    num_adapter = len(args.considered_classes)
     # gestisco i dataset 
 
+
+    
     train_transforms = transforms.Compose([ transforms.RandomCrop(args.patch_size), transforms.ToTensor()])
     valid_transforms = transforms.Compose([transforms.CenterCrop(args.patch_size),  transforms.ToTensor()]) #transforms.CenterCrop(args.patch_size),
     test_transforms = transforms.Compose([transforms.ToTensor()])
 
-
-    train_dataset = AdapterDataset(root = args.root, path = args.train_datasets, classes = args.considered_classes, transform= train_transforms, num_element = 20000)
+    # args.root + "/train"
+    train_dataset = AdapterDataset(root = args.root + "/train", path = args.train_datasets, classes = args.considered_classes, transform= train_transforms, num_element = 4000)
     train_dataloader = DataLoader(train_dataset,batch_size=args.batch_size,num_workers=4,shuffle=True, pin_memory=(device == device),)
-    
+        
 
-    valid_dataset = AdapterDataset(root = args.root, path = args.valid_datasets,classes = args.considered_classes, transform= valid_transforms,num_element = 1000)
+    valid_dataset = AdapterDataset(root = args.root + "/valid", path = args.valid_datasets,classes = args.considered_classes, transform= valid_transforms,num_element = 816)
     valid_dataloader = DataLoader(valid_dataset,batch_size= args.batch_size ,num_workers=4,shuffle=False, pin_memory=(device == device),)
-    
+        
 
-    test_total_dataset = AdapterDataset(root = args.root, path  =  args.test_datasets, classes = args.considered_classes ,transform = test_transforms,num_element = 200,train = False)
-    
+    test_total_dataset = AdapterDataset(root = args.root + "/test", path  =  args.test_datasets, classes = args.considered_classes ,transform = test_transforms,num_element = 20,train = False)
+        
     test_total_dataloader = DataLoader(test_total_dataset,batch_size= 1,num_workers=4,shuffle=False, pin_memory=(device == device),)
-    
-    net, modello_base  = get_gate_model(args, device) #se voglio allenare la baseline, questo è la baseline
+        
+    net, modello_base  = get_gate_model(args, num_adapter,device) #se voglio allenare la baseline, questo è la baseline
 
-    #evaluate_base_model(modello_base,args,device)
+    evaluate_base_model(modello_base,args,device)
 
     
-    
+    """
     print("CONTROLLO DATASET!!!!!")
     
     train_tens = torch.zeros(len(train_dataset.samples))
@@ -293,6 +360,8 @@ def main(argv):
 
     if args.train_baseline:
         criterion = DistorsionLoss(lmbda = args.lmbda)
+    elif args.ms_ssim:
+        criterion = MssimLoss()
     else:
         if args.training_policy == "gate":
             criterion =  GateLoss()
@@ -318,7 +387,7 @@ def main(argv):
     counter = 0
     best_loss = float("inf")
 
-    writing = "/scratch/KD/devil2022/results/adapters/q6/" + "_" + str(args.lmbda)
+    writing = "/scratch/KD/devil2022/results/adapters/q5/5_classes/" + "_" + str(args.lmbda)
 
     if args.restart_training is False:
         epoch = 0
@@ -343,6 +412,9 @@ def main(argv):
         for nn,tt in net.named_parameters():
             if "original" in nn:
                 print(tt.requires_grad)
+        
+
+
 
 
         start = time.time()
@@ -396,10 +468,10 @@ def main(argv):
         print("start the part related to beta")
 
 
-        if epoch%10==0 or (is_best and epoch > 50):
+        if epoch%5==0 or (is_best and epoch > 50):
 
             net.update()
-            evaluate_base_model_gate(net, args,device, epoch_enc,args.num_adapter,oracle = args.oracle, train_baseline = args.train_baseline, writing  = writing)
+            evaluate_base_model_gate(net, args,device, epoch_enc,num_adapter,oracle = args.oracle, train_baseline = args.train_baseline, writing  = None)
             epoch_enc += 1
             
         
@@ -418,11 +490,11 @@ def main(argv):
         end = time.time()
         print("Runtime of the epoch:  ", epoch)
         sec_to_hours(end - start) 
-        print("END OF EPOCH ", epoch)
-    
+        print("END OF EPOCH! ", epoch)
+    """
     
 if __name__ == "__main__":
-    #Enhanced-imagecompression-adapter-sketch -DCC-q1 #ssss
-    wandb.init(project="DCC-q6-painting", entity="albertopresta")   
+    #Enhanced-imagecompression-adapter-sketch -DCC-q1 #ssssssssssss
+    wandb.init(project="DCC-q5-trial", entity="albertopresta")   
     main(sys.argv[1:])
 

@@ -99,7 +99,6 @@ class Adapter(nn.Module):
 
     def initialization(self,m): 
         if isinstance(m, nn.Conv2d) or isinstance(m,nn.Linear) :
-            print("sono entrato qua per inizializzare")
             nn.init.normal_(m.weight, mean=self.mean, std=self.standard_deviation)
             if m.bias is not None:
                 torch.nn.init.zeros_(m.bias)       
@@ -162,7 +161,7 @@ class Adapter(nn.Module):
                     model.apply(self.initialization)
                     return model 
                 else:
-                    model = nn.Conv2d(self.in_ch, self.out_ch, kernel_size=self.kernel_size, stride=self.stride, bias=self.bias, groups=self.groups)
+                    model = nn.Conv2d(self.in_ch, self.out_ch, kernel_size=self.kernel_size, stride=self.stride, bias=self.bias, groups=self.groups, padding = self.padding)
                     model.apply(self.initialization)
                     return model #nn.Conv2d(self.in_ch, self.out_ch, kernel_size=self.kernel_size, stride=self.stride, bias=self.bias, groups=self.groups)
             
@@ -186,7 +185,7 @@ class Adapter(nn.Module):
                     model.apply(self.initialization)
                     return model
                 else:
-                    print("entro qua che è il punto in cui faccio come wacv!!!!!")
+
                     params = OrderedDict([
                     (self.name + "_adapter_conv1",nn.Conv2d(self.in_ch,self.dim_adapter,kernel_size=self.kernel_size,bias=self.bias,stride=self.stride,groups=self.groups,padding = self.padding)),
                  #   ('ReLU0_adapter',nn.RsELU()),
