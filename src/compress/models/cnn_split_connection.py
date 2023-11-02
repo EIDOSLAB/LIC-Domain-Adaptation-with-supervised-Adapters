@@ -96,7 +96,7 @@ class WACNNSplitConnections(WACNN):
 
 
 
-    def unfreeze_adapters(self, re_grad = False): 
+    def pars_adapter(self, re_grad = False): 
         #for single_adapter in self.adapter_trasforms:
         for n,p in self.g_s.named_parameters(): 
                 if "adapter_transpose" in n or "AdapterModule" in n:

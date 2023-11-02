@@ -37,13 +37,13 @@ def evaluate_base_model(model, args,device):
                               path  =  ["_sketch_.txt"],
                               classes = cons_classes, 
                               transform = test_transforms,
-                               num_element = 25,
+                               num_element = 30,
                               train = False)
     painting_f = painting.samples
     painting_filelist = []
     for i in range(len(painting_f)):
         painting_filelist.append(painting_f[i][0])
-    psnr, bpp = compress_with_ac(model, painting_filelist, device, -1, loop=False, writing= args.writing + "sketch_")
+    psnr, bpp = compress_with_ac(model, painting_filelist, device, -1, loop=False, writing= args.writing + args.quality +"/sketch_")
     print(psnr,"  ",bpp)
 
 
@@ -56,14 +56,34 @@ def evaluate_base_model(model, args,device):
                               path  =  ["_clipart_.txt"],
                               classes = cons_classes,
                                 transform = test_transforms,
-                                num_element=25,
+                                num_element=30,
                                 train = False)
     painting_f = painting.samples
     painting_filelist = []
     for i in range(len(painting_f)):
         painting_filelist.append(painting_f[i][0])
-    psnr, bpp = compress_with_ac(model, painting_filelist, device, -1, loop=False, writing= args.writing + "comic_")
+    psnr, bpp = compress_with_ac(model, painting_filelist, device, -1, loop=False, writing= args.writing + args.quality + "/clipart_")
     print(psnr,"  ",bpp)
+
+    print("******************************************  COMIC ****************************************************************") #sssss
+    if "comic" not in args.considered_classes:
+        cons_classes = args.considered_classes + ["comic"]
+    else:
+        cons_classes = args.considered_classes 
+    painting = AdapterDataset(root = args.root + "/test", 
+                              path  =  ["_comic_.txt"],
+                              classes = cons_classes,
+                                transform = test_transforms,
+                                num_element=30,
+                                train = False)
+    painting_f = painting.samples
+    painting_filelist = []
+    for i in range(len(painting_f)):
+        painting_filelist.append(painting_f[i][0])
+    psnr, bpp = compress_with_ac(model, painting_filelist, device, -1, loop=False, writing= args.writing +  args.quality  + "/comic_")
+    print(psnr,"  ",bpp)
+
+
     print("******************************************  KODAK ****************************************************************")
     painting = AdapterDataset(root = args.root + "/test", 
                               path  =  ["_kodak_.txt"],
@@ -75,28 +95,28 @@ def evaluate_base_model(model, args,device):
     painting_filelist = []
     for i in range(len(painting_f)):
         painting_filelist.append(painting_f[i][0])
-    psnr, bpp = compress_with_ac(model, painting_filelist, device, -1, loop=False, writing= args.writing + "kodak_")
+    psnr, bpp = compress_with_ac(model, painting_filelist, device, -1, loop=False, writing= args.writing + args.quality +  "/kodak_")
     print(psnr,"  ",bpp)
 
     print("******************************************  INFO ****************************************************************")
     if "comic" not in args.considered_classes:
-        cons_classes = args.considered_classes + ["infograph"]
+        cons_classes = args.considered_classes + ["infographics"]
     else:
         cons_classes = args.considered_classes 
     painting = AdapterDataset(root = args.root + "/test", 
-                              path  =  ["_infograph_.txt"],
+                              path  =  ["_infographics_.txt"],
                               classes = args.considered_classes,
                                 transform = test_transforms,
-                                num_element=25,
+                                num_element=30,
                                 train = False)
     painting_f = painting.samples
     painting_filelist = []
     for i in range(len(painting_f)):
         painting_filelist.append(painting_f[i][0])
-    psnr, bpp = compress_with_ac(model, painting_filelist, device, -1, loop=False, writing= args.writing + "infographics_")
+    psnr, bpp = compress_with_ac(model, painting_filelist, device, -1, loop=False, writing= args.writing + args.quality + "/infographics_")
     print(psnr,"  ",bpp)
     print("******************************************  PAINTING ****************************************************************")
-
+    """
     if "painting" not in args.considered_classes:
         cons_classes = args.considered_classes + ["painting"]
     else:
@@ -113,7 +133,7 @@ def evaluate_base_model(model, args,device):
         painting_filelist.append(painting_f[i][0])
     psnr, bpp = compress_with_ac(model, painting_filelist, device, -1, loop=False, writing= args.writing + "watercolor_")
     print(psnr,"  ",bpp)
-
+    
     print("******************************************  PAINTING ****************************************************************")
 
     if "quickdraw" not in args.considered_classes:
@@ -132,6 +152,7 @@ def evaluate_base_model(model, args,device):
         painting_filelist.append(painting_f[i][0])
     psnr, bpp = compress_with_ac(model, painting_filelist, device, -1, loop=False, writing= args.writing + "watercolor_")
     print(psnr,"  ",bpp)
+    """
 
 def handle_trainable_pars(net, args, epoch):
     net.freeze_net()
@@ -176,11 +197,16 @@ def from_state_dict(cls, state_dict):
     return net
 
 def get_gate_model(args,num_adapter, device):
+    pret_checkpoint = args.pret_checkpoint + "/" + args.quality + "/model.pth"
+
+    print("------> pret checkpoint ",pret_checkpoint)
 
     if args.name_model == "cheng":
         
         
-        modello_base =  image_models["cheng2020-attn"](quality=args.quality, metric="mse", pretrained=True, progress=False)
+        qual = int(args.quality[1])
+        print("la qualità è: ",qual)
+        modello_base =  image_models["cheng2020-attn"](quality=qual, metric="mse", pretrained=True, progress=False)
         modello_base.update()
         modello_base.to(device)   
 
@@ -219,6 +245,10 @@ def get_gate_model(args,num_adapter, device):
                 print(k)
 
         
+        
+        info = net.load_state_dict(state_dict, strict=False)
+        net.update()
+        net.to(device) 
         return net, modello_base
 
 
@@ -226,16 +256,49 @@ def get_gate_model(args,num_adapter, device):
 
     elif args.name_model == "WACNN":
         if args.train_baseline:
-            checkpoint = torch.load(args.pret_checkpoint , map_location=device)
+            checkpoint = torch.load(pret_checkpoint , map_location=device)
             net = from_state_dict(models["base"], checkpoint)
             net.to(device)
             net.update()
             return net, net
         else:
             if args.origin_model == "base":
-                checkpoint = torch.load(args.pret_checkpoint , map_location=device)#["state_dict"]
+                checkpoint = torch.load(pret_checkpoint , map_location=device)#["state_dict"]
             else:
-                checkpoint = torch.load(args.pret_checkpoint , map_location=device)["state_dict"]
+                checkpoint = torch.load(pret_checkpoint , map_location=device)#["state_dict"]
+                state_dict = checkpoint["state_dict"]
+                args_new = checkpoint["args"]
+
+                net = models["gate"](N = args_new.N,
+                                    M =args_new.M,
+                                    dim_adapter_attn = args_new.dim_adapter_attn,
+                                    stride_attn = args_new.stride_attn,
+                                    kernel_size_attn = args_new.kernel_size_attn,
+                                    padding_attn = args_new.padding_attn,
+                                    type_adapter_attn = args_new.type_adapter_attn,
+                                    position_attn = args_new.position_attn,
+                                    num_adapter = 3 ,#len(args.considered_classes),
+                                    aggregation = args_new.aggregation,
+                                    std = args_new.std,
+                                    mean = args_new.mean,                              
+                                    bias = True, # args_new.bias,
+                                    skipped = False
+                                        ) 
+                
+
+
+    
+                info = net.load_state_dict(state_dict, strict=True)
+
+
+
+                print("**************************************************  COSA C'E' NELLO STATE DICT")
+                stdict = list(net.state_dict())
+                for j,m in enumerate(list(checkpoint.keys())):
+                    if "g_s" in m:
+                        print(m == stdict[j] )
+                print("***************************************************************************************") 
+                return net, net
             modello_base = from_state_dict(models[args.origin_model], checkpoint)
             modello_base.update()
             modello_base.to(device) 
@@ -262,9 +325,18 @@ def get_gate_model(args,num_adapter, device):
                                 skipped = args.skipped
                                     ) 
 
-
+            print("entro qua parte 1")
             state_dict = modello_base.state_dict()
-            if args.origin_model == "base":
+            #state_dict = net.state_dict()
+
+
+            if True: # args.origin_model == " base":
+                print("rinomino questo porca miseria!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+
+                state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.1.original_model_weights.weight", stringa = "g_s.1.weight" ): v for k, v in state_dict.items()}
+                state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.1.original_model_weights.bias", stringa = "g_s.1.bias" ): v for k, v in state_dict.items()}
+                state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.3.original_model_weights.weight", stringa = "g_s.3.weight" ): v for k, v in state_dict.items()}
+                state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.3.original_model_weights.bias", stringa = "g_s.3.bias" ): v for k, v in state_dict.items()}
                 state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.6.original_model_weights.weight", stringa = "g_s.6.weight" ): v for k, v in state_dict.items()}
                 state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.6.original_model_weights.bias", stringa = "g_s.6.bias" ): v for k, v in state_dict.items()}
                 state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.8.original_model_weights.weight", stringa = "g_s.8.weight" ): v for k, v in state_dict.items()}
@@ -278,7 +350,19 @@ def get_gate_model(args,num_adapter, device):
                     if "gate." in k:
                         state_dict[k] = gate_dict[k]
 
+            print("**************************************************** MODELLO BASE ******************************************************")
+            print("************************************************************************************************************************")
+            for k in list(state_dict.keys()):
+                if "g_s" in k:
+                    print(k)
+
             
+            print("************************************************NUOVO MODELLO***************************************")       
+            stdict = list(net.state_dict())
+            for j,m in enumerate(stdict):
+                if "g_s" in m:
+                    print(m)
+                 
 
             
             info = net.load_state_dict(state_dict, strict=False)
@@ -308,7 +392,7 @@ def main(argv):
     test_transforms = transforms.Compose([transforms.ToTensor()])
 
     # args.root + "/train"
-    train_dataset = AdapterDataset(root = args.root + "/train", path = args.train_datasets, classes = args.considered_classes, transform= train_transforms, num_element = 25000)
+    train_dataset = AdapterDataset(root = args.root + "/train", path = args.train_datasets, classes = args.considered_classes, transform= train_transforms, num_element = 4000)
     train_dataloader = DataLoader(train_dataset,batch_size=args.batch_size,num_workers=4,shuffle=True, pin_memory=(device == device),)
         
 
@@ -316,17 +400,17 @@ def main(argv):
     valid_dataloader = DataLoader(valid_dataset,batch_size= args.batch_size ,num_workers=4,shuffle=False, pin_memory=(device == device),)
         
 
-    test_total_dataset = AdapterDataset(root = args.root + "/test", path  =  args.test_datasets, classes = args.considered_classes ,transform = test_transforms,num_element = 25,train = False)
+    test_total_dataset = AdapterDataset(root = args.root + "/test", path  =  args.test_datasets, classes = args.considered_classes ,transform = test_transforms,num_element = 30,train = False)
         
     test_total_dataloader = DataLoader(test_total_dataset,batch_size= 1,num_workers=4,shuffle=False, pin_memory=(device == device),)
         
-    net, modello_base  = get_gate_model(args, num_adapter,device) #se voglio allenare la baseline, questo è la baseline
+    net, modello_base  = get_gate_model(args, num_adapter,device) #se voglio allenare la baseline, questo è la baseline #dd
 
     evaluate_base_model(modello_base,args,device)
 
     
-    
-    print("CONTROLLO DATASET!!!!!")
+    """
+    print("CONTROLLO DATASET!!!!!!!!!!!!")
     
     train_tens = torch.zeros(len(train_dataset.samples))
 
@@ -386,7 +470,7 @@ def main(argv):
     counter = 0
     best_loss = float("inf")
 
-    writing = "/scratch/KD/devil2022/results/adapters/q5/5_classes/" + "_" + str(args.lmbda)
+    writing ="/scratch/KD/devil2022/results/adapters/"  +  args.quality + "/_" + args.aggregation + "_"
 
     if args.restart_training is False:
         epoch = 0
@@ -399,6 +483,10 @@ def main(argv):
     print("****************************************************************************************************************")
 
     epoch_enc = 0
+
+
+
+
     for epoch in range(0, args.epochs):
         print("************************************************************************************************")
         print("*************************************** EPOCH  ",epoch," *****************************************")
@@ -407,7 +495,16 @@ def main(argv):
         model_fr_parameters = sum(p.numel() for p in net.parameters() if p.requires_grad== False)
         print(" trainable parameters: ",model_tr_parameters)
         print(" freeze parameterss: ", model_fr_parameters)
+
         print("vedo se i parametri che devono essere bloccati lo sono")
+        model_fr_parameters = sum(p.numel() for n,p in net.named_parameters() if "g_s" in n  and p.requires_grad is False)
+        print("decoder: ",model_fr_parameters)
+        model_fr_parameters = sum(p.numel() for n,p in net.named_parameters() if "gate" in n  and  p.requires_grad) #adapter
+        print("gate: ",model_fr_parameters)   
+        model_fr_parameters = sum(p.numel() for n,p in net.named_parameters() if "adapter" in n  and  p.requires_grad) #adapter
+        print("adapter: ",model_fr_parameters)   
+        print("**********************************  INFORMATIO *****************************************************")
+        net.print_information()    
         for nn,tt in net.named_parameters():
             if "original" in nn:
                 print(tt.requires_grad)
@@ -418,7 +515,7 @@ def main(argv):
 
         start = time.time()
         
-
+        
         if model_tr_parameters > 0:
             counter = train_one_epoch_gate(net, criterion, train_dataloader, optimizer,args.training_policy,epoch,counter, oracle= args.oracle,train_baseline = args.train_baseline)
 
@@ -465,12 +562,12 @@ def main(argv):
         wandb.log(log_dict)
         # learning rate stuf
         print("start the part related to beta")
+        
 
-
-        if epoch%5==0 or (is_best and epoch > 50):
+        if epoch%10==0 or (is_best and epoch > 200):
 
             net.update()
-            evaluate_base_model_gate(net, args,device, epoch_enc,num_adapter,oracle = args.oracle, train_baseline = args.train_baseline, writing  = None)
+            evaluate_base_model_gate(net, args,device, epoch_enc,num_adapter,oracle = args.oracle, train_baseline = args.train_baseline, writing  = writing) #writing
             epoch_enc += 1
             
         
@@ -490,10 +587,11 @@ def main(argv):
         print("Runtime of the epoch:  ", epoch)
         sec_to_hours(end - start) 
         print("END OF EPOCH! ", epoch)
+    """
     
     
 if __name__ == "__main__":
-    #Enhanced-imagecompression-adapter-sketch -DCC-q1 #ssssssssssss
-    wandb.init(project="DCC-q5-DomainNet", entity="albertopresta")   
+    #Enhanced-imagecompression-adapter-sketch -DCC-q1 #ssssssssssssss
+    wandb.init(project="cheng_eval", entity="albertopresta")   
     main(sys.argv[1:])
 

@@ -278,10 +278,17 @@ class WACNN(CompressionModel):
 
 
     def print_information(self):
+        print(" g_a: ",sum(p.numel() for p in self.g_a.parameters()))
+        print(" h_a: ",sum(p.numel() for p in self.h_a.parameters()))
         print(" h_means_a: ",sum(p.numel() for p in self.h_mean_s.parameters()))
         print(" h_scale_a: ",sum(p.numel() for p in self.h_scale_s.parameters()))
         print("cc_mean_transforms",sum(p.numel() for p in self.cc_mean_transforms.parameters()))
         print("cc_scale_transforms",sum(p.numel() for p in self.cc_scale_transforms.parameters()))
+        print("cc_scale_transforms",sum(p.numel() for p in self.lrp_transforms.parameters()))
+        print("g_s: ",sum(p.numel() for p in self.g_s.parameters()))
+
+
+
 
 
 

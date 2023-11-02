@@ -188,7 +188,7 @@ class Adapter(nn.Module):
 
                     params = OrderedDict([
                     (self.name + "_adapter_conv1",nn.Conv2d(self.in_ch,self.dim_adapter,kernel_size=self.kernel_size,bias=self.bias,stride=self.stride,groups=self.groups,padding = self.padding)),
-                 #   ('ReLU0_adapter',nn.RsELU()),
+                   ('ReLU0_adapter',nn.ReLU()),
                     (self.name + "_adapter_conv2",nn.Conv2d(self.dim_adapter, self.out_ch, kernel_size=self.kernel_size, bias=self.bias,stride=self.stride, groups=self.groups, padding = self.padding))])
                     
                     

@@ -231,7 +231,8 @@ def compress_with_ac(model,  filelist, device, epoch, name = "",loop = True,  wr
 
     
     with torch.no_grad():
-        for i,d in enumerate(filelist): 
+        for i,d in enumerate(filelist):
+            print("------------------------------ image i ----> ",d) 
 
             x = read_image(d, adapt = False).to(device)
 
@@ -244,7 +245,9 @@ def compress_with_ac(model,  filelist, device, epoch, name = "",loop = True,  wr
 
 
             data =  model.compress(x_padded)
+            print("end compress")
             out_dec = model.decompress(data["strings"], data["shape"])
+            print("end decompress")
 
             out_dec["x_hat"] = F.pad(out_dec["x_hat"], unpad)
 
@@ -254,12 +257,12 @@ def compress_with_ac(model,  filelist, device, epoch, name = "",loop = True,  wr
 
 
                 image = transforms.ToPILImage()(out_dec['x_hat'].squeeze())
-                nome_salv = os.path.join(save_images, nome_immagine + ".png")
+                nome_salv = os.path.join(save_images, nome_immagine + "base2.png")
                 image.save(nome_salv)
 
 
 
-            # parte la prova, devo controllare che y_hat sia sempre uguale!!!!! 
+            # parte la prova, devo controllare che y_hat sia sempre uguale!!!!! !!!!
             #out = model.forward(x)
             #y_hat_t = out["y_hat"].ravel()
             #y_hat_comp = out_dec["y_hat"].ravel()
@@ -273,6 +276,7 @@ def compress_with_ac(model,  filelist, device, epoch, name = "",loop = True,  wr
 
             psnr_im = compute_psnr(x, out_dec["x_hat"])
             ms_ssim_im = compute_msssim(x, out_dec["x_hat"])
+            ms_ssim_im = -10*math.log10(1 - ms_ssim_im )
             psnr_val.update(psnr_im)
             mssim_val.update(ms_ssim_im)
             

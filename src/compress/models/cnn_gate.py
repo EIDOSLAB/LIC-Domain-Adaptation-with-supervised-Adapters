@@ -49,9 +49,10 @@ class WACNNGateAdaptive(WACNN):
 
         self.g_s = nn.Sequential(
             Win_noShift_Attention( dim=M, num_heads=8,window_size=4,shift_size=2),  # for the attention (no change)
-            deconv(M, N, kernel_size=5, stride=2),
+            ResidualMultipleAdaptersDeconv(M, N, kernel_size=5, stride=2, num_adapter = num_adapter, skipped = skipped, aggregation= aggregation),  #deconv(M, N, kernel_size=5, stride=2),
             GDN(N, inverse=True),
-            deconv(N, N, kernel_size=5, stride=2),
+            #deconv(N, N, kernel_size=5, stride=2), # rimettere 
+            ResidualMultipleAdaptersDeconv(N, N, kernel_size=5, stride=2, num_adapter = num_adapter, skipped = skipped, aggregation= aggregation), 
             GDN(N, inverse=True),
             Win_noShift_Attention_Multiple_Adapter( dim=N,num_heads=8,window_size=8,shift_size=4,
                                           dim_adapter=dim_adapter_attn,
@@ -173,10 +174,10 @@ class WACNNGateAdaptive(WACNN):
 
 
         for j,module in enumerate(self.g_s):
-            if j in (0,1,2,3,4,7):
+            if j in (0,2,4,7):
                 
                 y_hat = module(y_hat)
-            elif j in (5,6):
+            elif j in (1,3,5,6):
                 y_hat = module(y_hat, gate_probs, oracle)
             else: # caso finale in cui j == self.length_reconstruction_decoder -1
                 x_hat = module(y_hat, gate_probs,oracle)
@@ -311,15 +312,13 @@ class WACNNGateAdaptive(WACNN):
         #y_hat = self.adapter(y_hat) + y_hat
 
         for j,module in enumerate(self.g_s):
-            if j in (0,1,2,3,4,7):
+            if j in (0,2,4,7):
                 
                 y_hat = module(y_hat)
-            elif j in (5,6):
-                y_hat = module(y_hat, gate_probs, oracle = oracle)
+            elif j in (1,3,5,6):
+                y_hat = module(y_hat, gate_probs, oracle)
             else: # caso finale in cui j == self.length_reconstruction_decoder -1
-                x_hat = module(y_hat, gate_probs, oracle = oracle).clamp_(0,1)
-             
-             
+                x_hat = module(y_hat, gate_probs,oracle)
 
         return {"x_hat": x_hat, "y_hat":y_hat, "logits":gate_probs}
     
@@ -328,5 +327,5 @@ class WACNNGateAdaptive(WACNN):
     def forward_gate(self,x):
         y = self.g_a(x)
         # qua metterei il Gate 
-        logits = self.gate(y) #questi sono i valori su cui fare la softmax 
+        logits = self.gate(y) #questi sono i valori su cui fare la softmax ##
         return {"x_hat": x, "logits": logits}    

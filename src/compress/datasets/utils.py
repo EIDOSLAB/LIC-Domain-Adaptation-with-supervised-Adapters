@@ -168,11 +168,11 @@ class AdapterDataset(Dataset):
 
 
 
-    def __init__(self, root, path=["train.txt"], transform = None, classes =  ["natural","sketch","watercolor","comic","infographics","quickdraw"], num_element = 2000, train = True):
+    def __init__(self, root, path=["train.txt"], transform = None, classes =  ["natural","sketch","clipart","watercolor","comic","infographics","quickdraw"], num_element = 2000, train = True):
 
 
 
-        #cont_nat, cont_sketch, cont_clip, cont_painting = 0,0,0,0 #ciao
+        #cont_nat, cont_sketch, cont_clip, cont_painting = 0,0,0,0 #ciaovvv
         self.classes = classes
         self.samples =[]# [f for f in splitdir.iterdir() if f.is_file()]   
         for p in path:
@@ -205,22 +205,25 @@ class AdapterDataset(Dataset):
             for cl in list(self.class_label.keys()):
                 counter = 0
                 for i,lines in enumerate(Lines):
-                    
-                    #spec_num_element = num_element if cl == "openimages" else num_element
-                    if cl in lines and counter <num_element: #splitdir
+
+                    spec_num_element = num_element if cl == "openimages" else num_element
+                    if cl in splitdir and counter < spec_num_element: #splitdir
                         
-                        if "kodak" not in cl and "clic" not in cl:
+                        if  lines.split(" ")[0][-1] == '\n': #"quickdraw" in cl : #"kodak" not in cl and "clic" not in cl:
                             ln = lines.split(" ")[0][:-1]
                         else: 
                             ln = lines.split(" ")[0]
-                        self.samples.append((ln, str(self.class_label[cl])))
+                        if "quickdraw" in splitdir: 
+                            self.samples.append(("/scratch/dataset/DomainNet/data/" + ln, str(self.class_label[cl])))
+                        else:
+                            self.samples.append((ln, str(self.class_label[cl])))
                         counter +=1
-                        if i % 10000==0:
-                            print(i," ", self.samples[-1])
+                        #if i % 10000==0:
+                        #    print(i," ", self.samples[-1])
 
                     """
                     if "sketch"in lines and cont_sketch < num_element: #dddd
-                        self.samples.append((lines.split(" ")[0], str(self.class_label["sketch"])))
+                        self.samples.append((lines.split(" ")[0], str(self.class_label["sketch"]))) #ssss
                         cont_sketch +=1     
                     if "clipart" in lines and cont_clip < num_element:
                         self.samples.append((lines.split(" ")[0],  str(self.class_label["clipart"])))
@@ -253,9 +256,9 @@ class AdapterDataset(Dataset):
 
 from sklearn.model_selection import train_test_split
 
-def create_data_file_for_multiple_adapters(classes = ["quickdraw"], #"natural""natural","comic",
+def create_data_file_for_multiple_adapters(classes = ["documents"], #"natural""natural","comic",
                                             split = "test", 
-                                           savepath = "/scratch/dataset/DomainNet/splitting/mixed",
+                                           savepath = "/scratch/dataset/domain_adapter/MixedImageSets",
                                            num_im_per_class = 200,
                                     random_seed = 42):
     seed(random_seed)
@@ -321,8 +324,8 @@ def create_data_file_for_multiple_adapters(classes = ["quickdraw"], #"natural""n
 
             print("Inizio random")
             # Dividi la lista in tre parti
-            train, rimanente = train_test_split(tutti_i_file, train_size=0.9, shuffle=True)
-            valid, test = train_test_split(rimanente, train_size=0.9, shuffle=True)
+            train, rimanente = train_test_split(tutti_i_file, train_size=0.01, shuffle=True)
+            valid, test = train_test_split(rimanente, train_size=0.01, shuffle=True)
 
             # Stampa le tre parti
             print("Prima parte:", len(train))

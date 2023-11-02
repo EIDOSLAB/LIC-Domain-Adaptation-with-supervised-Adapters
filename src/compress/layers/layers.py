@@ -354,9 +354,9 @@ class AttentionBlockWithMultipleAdapters(AttentionBlock):
         
 
 
-        summed_out = out.unsqueeze(1).repeat(1,self.num_adapter,1,1,1) # [16,3,192,18,24] #torch.sum(torch.stack([self.adapters[i](out)*gate_prob[i] for i in range(self.num_adapter)], dim = 1),dim = 1) 
+        summed_out = out.unsqueeze(1).repeat(1,self.num_adapter,1,1,1).to("cuda") # [16,3,192,18,24] #torch.sum(torch.stack([self.adapters[i](out)*gate_prob[i] for i in range(self.num_adapter)], dim = 1),dim = 1) 
         ad_summed_out = torch.stack([self.adapters[i](summed_out[:,i,:,:,:]) for i in range(self.num_adapter)], dim = 1)
-        ad_summed_out = ad_summed_out*gate_prob[:,:,None,None,None]
+        ad_summed_out = ad_summed_out*gate_prob[:,:,None,None,None].to("cuda")
         ad_summed_out = torch.sum(ad_summed_out, dim =1) #[16,192,18,24]
         if self.position == "res":
             return  out  + ad_summed_out # torch.sum(torch.stack([self.adapters[i](out)*gate_prob[i] for i in range(self.num_adapter)], dim = 1),dim = 1) # [BS, num_adapter, h, w]
@@ -479,10 +479,12 @@ class ResidualBlockUpsampleMultipleAdapters(ResidualBlockUpsample):
                 num_adapter = 3, 
                 name = [], 
                 aggregation = "weighted", 
+                threshold = -1,
                 ):
 
         super().__init__( in_ch = in_ch, out_ch = out_ch, upsample = upsample)
 
+        self.threshold = threshold
         self.mean = mean 
         self.standard_deviation = standard_deviation
         self.aggregation = aggregation
@@ -573,12 +575,13 @@ class subpel_conv3x3MultipleAdapters(nn.Module):
                 num_adapter = 3, 
                 name = [], 
                 aggregation = "weighted", 
+                threshold = -1
                 ):
         
         super().__init__()
         self.original_model_weights = nn.Sequential(nn.Conv2d(in_ch, out_ch * r ** 2, kernel_size=3, padding=1), nn.PixelShuffle(r))
 
-
+        self.threshold = threshold
         self.mean = mean 
         self.standard_deviation = standard_deviation
         self.aggregation = aggregation
