@@ -232,7 +232,7 @@ def compress_with_ac(model,  filelist, device, epoch, name = "",loop = True,  wr
     
     with torch.no_grad():
         for i,d in enumerate(filelist):
-            print("------------------------------ image i ----> ",d) 
+            print("------------------------------ IMAGE ----> ",d) 
 
             x = read_image(d, adapt = False).to(device)
 
@@ -245,9 +245,9 @@ def compress_with_ac(model,  filelist, device, epoch, name = "",loop = True,  wr
 
 
             data =  model.compress(x_padded)
-            print("end compress")
+            #print("end compress")
             out_dec = model.decompress(data["strings"], data["shape"])
-            print("end decompress")
+            #print("end decompress")
 
             out_dec["x_hat"] = F.pad(out_dec["x_hat"], unpad)
 
@@ -283,6 +283,11 @@ def compress_with_ac(model,  filelist, device, epoch, name = "",loop = True,  wr
             size = out_dec['x_hat'].size()
             num_pixels = size[0] * size[2] * size[3]
             bpp = sum(len(s[0]) for s in data["strings"]) * 8.0 / num_pixels#sum(len(s[0]) for s in data["strings"]) * 8.0 / num_pixels
+
+            print("la lunghezza del bpp è -----> ",sum(len(s[0]) for s in data["strings"]) * 8.0)
+            print("num_pixels-----> ",num_pixels)
+            print("bpp totale ",bpp)
+            print("bpp !augmented-----> ",(sum(len(s[0]) for s in data["strings"]) * 8.0 + 32*3) / num_pixels)
 
             
             bpp_loss.update(bpp)

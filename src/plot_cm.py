@@ -25,6 +25,6 @@ plt.setp(heatmap.get_yticklabels(), rotation=90, fontsize=22)
 #plt.xlabel('Classe Prevista')
 #plt.ylabel('Target domains',fontsize =22)
 plt.xticks([])
-plt.title(r'$\mathbf{v}\times100$',fontsize = 20)
+plt.title(r' Predicted domain distribution',fontsize = 18)
 #plt.show()#
 plt.savefig("prob.pdf", dpi=200, bbox_inches='tight', pad_inches=0.01)

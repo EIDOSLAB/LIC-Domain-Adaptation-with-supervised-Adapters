@@ -42,7 +42,7 @@ def get_model_for_evaluation(model, pret_checkpoint, device, quality = None):
 
 
 
-    if "devil2022" in pret_checkpoint: #args.name_model == "WACNN":
+    if True: #"devil2022" in pret_checkpoint: #args.name_model == "WACNN":
         checkpoint = torch.load(pret_checkpoint , map_location=device)
         if model == "base":
             checkpoint = torch.load(pret_checkpoint , map_location=device)#["state_dict"]
@@ -168,132 +168,130 @@ def main(argv):
 
 
 
-
-    task = args.task
-    num_element = args.num_element 
-    path_task = "_" + task + "_.txt"
-    quality = args.quality
-    classes = "3_classes"
-    dat = "_"
-    root = "/scratch/dataset/domain_adapter/MixedImageSets/test"
-    painting_filelist = []
-    if "bam" not in task:
-
-        test_transforms = transforms.Compose([transforms.ToTensor()])
-        painting = AdapterDataset(root = root, path  =  [path_task], classes = ["natural","sketch","comic","quickdraw","infograph","watercolor","clipart","infograph","iam_document", "documents"],transform = test_transforms,train = False, num_element= num_element) #ddddddd
-        painting_f =painting.samples
-        oracles = []
-        for i in range(len(painting_f)):
-            if "b04-075" not in painting_f[i][0] and "b04-074" not in  painting_f[i][0]:
-                painting_filelist.append(painting_f[i][0])
-                oracles.append(int(painting_f[i][1]))
-    else:
-
-        bam_path = "/scratch/dataset/bam_dataset/splitting/_" + task + "_.txt" #_bam_comic_.txt"
-        bam = "/scratch/dataset/bam_dataset/bam/"
-        file_d = open(bam_path,"r") 
-        Lines = file_d.readlines()
-        for i,lines in enumerate(Lines):
-            painting_filelist.append(bam + lines[:-1])
-
-
-        oracles = []
-        for i in range(len(painting_filelist)):
-            
-            oracles.append(2)
-
-        print("lunghezza del bam",len(painting_filelist))
- 
-
-    print("linghezza del sample: ",len(painting_filelist))
-    print("**************************************")
-    print(painting_filelist)
-
-
-   
-
-
-    # IAM DOCUMENT 
-    #iam_path = "/scratch/dataset/domain_adapter/iam_document"
-    #painting_filelist = [os.path.join(iam_path,f) for f in os.listdir(iam_path)]
-    #oracles = []
-    #for i in range(len(painting_filelist)):
-    #    oracles.append(1)
-
-
-
-
-
-
-    
-
-
-   
-
-
-    
-    
-    mode = "gate"
-    save_images = None #"/scratch/KD/devil2022/results/reconstructions/" + task + "/png/" + mode + "/" + quality #ss
-    writing_path = args.writing + "/results/writings/mixture" #"/scratch/KD/devil2022/
-    writing = os.path.join(writing_path,task, mode, quality + "/")
-    
-
-
-    pret_checkpoint = args.pret_checkpoint #("/scratch/KD/devil2022/adapter/mixture"
-    path_models = os.path.join(pret_checkpoint,classes,quality) #DomainNet #sssssss
-    
-    
-    list_models = [os.path.join(path_models,f) for f in os.listdir(path_models) if "top1" not in f and "oracle" not in f]
-    
-    for m in list_models:
-
-        net = get_model_for_evaluation(mode,m,device)
-        if mode == "gate":
-            psnr, bpp = compress_with_ac_gate(net, 
-                                        painting_filelist, 
-                                        device, 
-                                        -1, 
-                                        3,
-                                        loop=False, 
-                                        name = dat + "_" + quality + "_" + task +  "_", 
-                                        oracles= None ,# [] ,#oracles, 
-                                        train_baseline= False,
-                                        writing =writing,
-                                        save_images = save_images)
+    for quality in ["q1","q2","q3","q4","q5","q6"]:
+        print("the quality is: ",quality)
+        task = args.task
+        num_element = args.num_element 
+        path_task = "_" + task + "_.txt"
+        #quality = args.quality
+        classes = "3_classes"
+        dat = "_"
+        root = "/scratch/dataset/domain_adapter/MixedImageSets/test"
+        painting_filelist = []
+        if "bam" not in task:
+            test_transforms = transforms.Compose([transforms.ToTensor()])
+            painting = AdapterDataset(root = root, path  =  [path_task], classes = ["natural","sketch","comic","quickdraw","infograph","watercolor","clipart","infograph","iam_document", "documents"],transform = test_transforms,train = False, num_element= num_element) #ddddddd
+            painting_f =painting.samples
+            oracles = []
+            for i in range(len(painting_f)):
+                if "b04-075" not in painting_f[i][0] and "b04-074" not in  painting_f[i][0]:
+                    painting_filelist.append(painting_f[i][0])
+                    oracles.append(int(painting_f[i][1]))
         else:
-            psnr,bpp =  compress_with_ac(net, painting_filelist, device, -1, loop=False,name =  quality + "_" + task + "_" ,  save_images = save_images, writing = writing)
-        print(mode,": ",psnr,"  ",bpp)
+            bam_path = "/scratch/dataset/bam_dataset/splitting/_" + task + "_.txt" #_bam_comic_.txt"
+            bam = "/scratch/dataset/bam_dataset/bam/"
+            file_d = open(bam_path,"r") 
+            Lines = file_d.readlines()
+            for i,lines in enumerate(Lines):
+                painting_filelist.append(bam + lines[:-1])
+
+
+            oracles = []
+            for i in range(len(painting_filelist)):
+                oracles.append(2)
+
+            print("lunghezza del bam",len(painting_filelist))
+    
+
+        print("linghezza del sample: ",len(painting_filelist))
+        print("**************************************")
+
+
 
     
+
+
+        # IAM DOCUMENT 
+        #iam_path = "/scratch/dataset/domain_adapter/iam_document"
+        #painting_filelist = [os.path.join(iam_path,f) for f in os.listdir(iam_path)]
+        #oracles = []
+        #for i in range(len(painting_filelist)):
+        #    oracles.append(1)
+
+
+
+
+
+
+        
+
+
     
-    path_models = os.path.join("/scratch/universal-dic/weights",quality)
-    mode = "base"
-    
 
-    save_images = None #"/scratch/KD/devil2022/results/reconstructions/" + task + "/png/" +mode + "/" + quality
-    writing_path = args.writing + "/results/writings/mixture"
-    writing = os.path.join(writing_path,task, mode, quality + "/") #dddddddddddd
 
-    list_models = [os.path.join(path_models,f) for f in os.listdir(path_models)]
-    for m in list_models:
+        
+        
+        mode = "gate"
+        save_images = None #"/scratch/KD/devil2022/results/reconstructions/" + task + "/png/" + mode + "/" + quality #ss
+        writing_path = args.writing + "/results/writings/mixture" #"/scratch/KD/devil2022/
+        writing = None #os.path.join(writing_path,task, mode, quality + "/")
+        
 
-        net = get_model_for_evaluation(mode,m,device,  quality = args.quality)
-        if mode == "gate": #ssss
-            psnr, bpp = compress_with_ac_gate(net, 
-                                        painting_filelist, 
-                                        device, 
-                                        -1, 
-                                        3,
-                                        loop=False, 
-                                        name =  quality + "_" + task + "_",  #sssssss
-                                        oracles= None, 
-                                        train_baseline= False,
-                                        writing =writing,
-                                        save_images = save_images)
-        else:
-            psnr,bpp =  compress_with_ac(net, painting_filelist, device, -1, loop=False,name =  quality + "_" + task + "_",  save_images = save_images, writing = writing)
-        print(mode,": ",psnr,"  ",bpp)  
+
+        pret_checkpoint = args.pret_checkpoint #("/scratch/KD/devil2022/adapter/mixture"
+        path_models = os.path.join(pret_checkpoint,classes,quality) #DomainNet #sssssss
+        
+        
+        list_models = [os.path.join(path_models,f) for f in os.listdir(path_models) if "top1" not in f and "oracle" not in f]
+        """
+        for m in list_models:
+
+            net = get_model_for_evaluation(mode,m,device)
+            if mode == "gate":
+                psnr, bpp = compress_with_ac_gate(net, 
+                                            painting_filelist, 
+                                            device, 
+                                            -1, 
+                                            3,
+                                            loop=False, 
+                                            name = dat + "_" + quality + "_" + task +  "_", 
+                                            oracles= None ,# [] ,#oracles, 
+                                            train_baseline= False,
+                                            writing =writing,
+                                            save_images = save_images)
+            else:
+                psnr,bpp =  compress_with_ac(net, painting_filelist, device, -1, loop=False,name =  quality + "_" + task + "_" ,  save_images = save_images, writing = writing)
+            print(mode,": ",psnr,"  ",bpp)
+
+        
+        """
+        path_models = os.path.join("/scratch/universal-dic/weights",quality)
+        mode = "base"
+        
+
+        save_images = None #"/scratch/KD/devil2022/results/reconstructions/" + task + "/png/" +mode + "/" + quality
+        writing_path = args.writing + "/results/writings/mixture"
+        writing = None #os.path.join(writing_path,task, mode, quality + "/") #dddddddddddd
+
+        list_models = [os.path.join(path_models,f) for f in os.listdir(path_models)]
+        for m in list_models:
+
+            net = get_model_for_evaluation(mode,m,device,  quality = args.quality)
+            if mode == "gate": #ssss
+                psnr, bpp = compress_with_ac_gate(net, 
+                                            painting_filelist, 
+                                            device, 
+                                            -1, 
+                                            3,
+                                            loop=False, 
+                                            name =  quality + "_" + task + "_",  #sssssss
+                                            oracles= None, 
+                                            train_baseline= False,
+                                            writing =writing,
+                                            save_images = save_images)
+            else:
+                psnr,bpp =  compress_with_ac(net, painting_filelist, device, -1, loop=False,name =  quality + "_" + task + "_",  save_images = save_images, writing = writing)
+            print(mode,": ",psnr,"  ",bpp)  
 
 
 

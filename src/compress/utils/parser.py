@@ -10,7 +10,7 @@ def parse_args_evaluation(argv):
 
     
 
-    parser.add_argument("--name_model", type=str,default = "cheng", choices = ["WACNN","cheng"], help="possible models")
+    parser.add_argument("--name_model", type=str,default = "WACNN", choices = ["WACNN","cheng"], help="possible models")
     parser.add_argument("--lrp", action="store_true", help="Use cuda")
     parser.add_argument("--lrp_path",default="nolrp",help="Model architecture (default: %(default)s)",)
     parser.add_argument("-gm","--gamma",default="gm0",help="Model architecture (default: %(default)s)",)

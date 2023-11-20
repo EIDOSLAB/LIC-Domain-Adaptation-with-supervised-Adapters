@@ -118,8 +118,8 @@ def plot_rate_distorsion(risultati,  savepath, domain):
     #plt.title('MS-SSIM comparison')
     plt.grid()
     
-    legend_elements = [Line2D([0], [0], label= "WACNN",color=palette[0]),
-                       Line2D([0], [0], label= "Cheng20",color=palette[1]),
+    legend_elements = [Line2D([0], [0], label= r'Zou et al. [10]',color=palette[0]),
+                       Line2D([0], [0], label= r'Cheng et al. [9]',color=palette[1]),
                         Line2D([0], [0], marker = "o", label='Proposed', color='k'),
                      Line2D([0], [0], marker='*',linestyle= ":" , label='Reference', color='k')]
 
@@ -127,7 +127,7 @@ def plot_rate_distorsion(risultati,  savepath, domain):
     #plt.legend(loc='lower right', fontsize = 25)
 
 
-    nome = "mixture_result_with_CHENG" + domain + "_.pdf"
+    nome = "mixture_result_with_CHENG_0611" + domain + "_.pdf"
 
     cp =  os.path.join(savepath,nome)
 
@@ -148,7 +148,7 @@ def main():
     
     nature = ["base","gate"]
 
-    domain = "sketch"
+    domain = "bam_comic"
     ii = 0
     
     risultati = {}
