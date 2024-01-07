@@ -77,11 +77,10 @@ def main(argv):
     train_dataloader, valid_dataloader, test_dataloader, filelist = handle_dataset(args, device = device)
 
 
-    print("estraggo la lista 1!!!")
     sketch_filelist = extract_list("/scratch/dataset/DomainNet/splitting/mixed/test_sketch.txt")
-    print("estraggo la lista 1!!!")
+
     clipart_filelist = extract_list("/scratch/dataset/DomainNet/splitting/mixed/test_clipart.txt")
-    print("estraggo la lista 1!!!")
+
     clic_filelist = extract_list("/scratch/dataset/DomainNet/splitting/mixed/test_clic.txt")
 
 
@@ -104,19 +103,10 @@ def main(argv):
     #lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", factor=0.3, patience=4)
 
     net = get_model(args,device)
-    net = net.to(device)
-
-
-
-
-
-    print("*****************************************  PRIMA ADAPTER ***********************************************************************")
+    net = net.to(device) 
     net.update() #444
-    #print("the filelist for compressinf is .",filelist)
-    b = compress_with_ac(net, filelist, device, -1, loop=False)
-    print("****************************************************************************************************************")
-    print("****************************************************************************************************************")
-    print("****************************************************************************************************************")
+
+
 
 
 
@@ -143,8 +133,8 @@ def main(argv):
 
 
 
-    optimizer, aux_optimizer = configure_optimizers(net, args)
-    print("hola!")
+    optimizer, _ = configure_optimizers(net, args)
+
     #lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", factor=0.5, patience=20)
     if args.scheduler == "plateau":
         lr_scheduler =  optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", factor=0.5, patience=args.patience)
@@ -183,17 +173,9 @@ def main(argv):
     print(" freeze parameters: ", model_fr_parameters)
 
     net.print_information()
-
-
-
-
-    print("*****************************************  DOPO AGGIUNTA ADAPTER ***********************************************************************")
     net.update() #444
     #print("the filelist for compressinf is .",filelist)
     #b = compress_with_ac(net, filelist, device, -1, loop=False)
-    print("****************************************************************************************************************")
-    print("****************************************************************************************************************")
-
 
     for epoch in range(last_epoch, args.epochs):
         print("**************** epoch: ",epoch,". Counter: ",counter," ")
@@ -201,11 +183,6 @@ def main(argv):
         print(f"Learning rate: {optimizer.param_groups[0]['lr']}","    ",previous_lr)
         print("epoch ",epoch)
 
-        print("##########################################################################################")
-        print("vedo se i parametri che devono essere bloccati lo sono")
-        for nn,tt in net.named_parameters():
-            if "original" in nn:
-                print(tt.requires_grad)
 
 
 
@@ -312,7 +289,7 @@ def main(argv):
 
 if __name__ == "__main__":
     #Enhanced-imagecompression-adapter-sketch
-    wandb.init(project="DCC-baseline", entity="albertopresta")   
+    wandb.init(project="DCC-train-model")   
     main(sys.argv[1:])
 
 

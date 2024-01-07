@@ -1,7 +1,6 @@
 import matplotlib.pyplot as plt 
 
 import os 
-import math 
 import numpy as np
 from matplotlib import rc
 from compress.utils.bjontegaard_metric import *
@@ -100,7 +99,6 @@ def plot_rate_distorsion(risultati,  savepath, domain):
                 minimo_psnr = psnr[j]
             if psnr[j] > massimo_psnr:
                 massimo_psnr = psnr[j]
-    print("----------------> ",domain,": ",psnr)
     minimo_psnr = int(minimo_psnr)
     massimo_psnr = int(massimo_psnr)
     psnr_tick =  [round(x) for x in range(minimo_psnr, massimo_psnr + 2)]
@@ -196,7 +194,6 @@ def main():
         ii = ii + 1
 
 
-        #print("ISULTATI: ",risultati)
         
         if "cheng" in mod:
             bpp_ref = risultati["base_cheng2020"]["bpp"]

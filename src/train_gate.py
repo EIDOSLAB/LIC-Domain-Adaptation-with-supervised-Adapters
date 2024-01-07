@@ -409,7 +409,7 @@ def main(argv):
     evaluate_base_model(modello_base,args,device)
 
     
-    """
+    
     print("CONTROLLO DATASET!!!!!!!!!!!!")
     
     train_tens = torch.zeros(len(train_dataset.samples))
@@ -587,7 +587,7 @@ def main(argv):
         print("Runtime of the epoch:  ", epoch)
         sec_to_hours(end - start) 
         print("END OF EPOCH! ", epoch)
-    """
+
     
     
 if __name__ == "__main__":
