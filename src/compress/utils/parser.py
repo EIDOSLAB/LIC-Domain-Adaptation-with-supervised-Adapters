@@ -44,7 +44,7 @@ def parse_args_gate(argv):
 
 
     parser.add_argument("--considered_classes", nargs='+', type = str, default = ["natural","sketch","comic"], help = "classes for training the adapters") # ["openimages","sketch","clipart",,"painting","infograph"] #["natural","sketch","infographics"]
-    parser.add_argument("--train_datasets", nargs='+', type = str, default = ["_natural_.txt","_sketch_.txt","_comic_.txt"] help = "txt files with the name of the files (must be the same of considered classes)", ) #["_natural_.txt","_sketch_.txt","_infographics_.txt"]
+    parser.add_argument("--train_datasets", nargs='+', type = str, default = ["_natural_.txt","_sketch_.txt","_comic_.txt"], help = "txt files with the name of the files (must be the same of considered classes)", ) #["_natural_.txt","_sketch_.txt","_infographics_.txt"]
     parser.add_argument("--valid_datasets", nargs='+', type = str, default =["_natural_.txt","_sketch_.txt","_comic_.txt"]) # ["valid_openimages.txt","valid_sketch.txt","valid_clipart.txt","valid_painting.txt","valid_infograph.txt"] 
     parser.add_argument("--test_datasets", nargs='+', type = str, default = ["_kodak_.txt","_clic_.txt","_sketch_.txt","_comic_.txt"]) # ["test_kodak.txt","test_clic.txt","test_sketch.txt","test_clipart.txt","test_painting.txt","test_infograph.txt"] #["_kodak_.txt","_clic_.txt","_sketch_.txt","_comic_.txt","_infographics_.txt","_watercolor_.txt"]
     parser.add_argument("--lmbda",type=float,default=0.5,help="gate-adapters distortion parameter",)
