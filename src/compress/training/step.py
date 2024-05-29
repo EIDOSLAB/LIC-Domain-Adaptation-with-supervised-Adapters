@@ -7,6 +7,7 @@ from PIL import Image
 from torchvision import transforms
 from pytorch_msssim import ms_ssim
 import math
+from compress.datasets import AdapterDataset
 
 def read_image(filepath, adapt =False):
     #assert filepath.is_file()
@@ -356,3 +357,38 @@ def compute_metrics( org, rec, max_val: int = 255):
     metrics["ms-ssim"] = ms_ssim(org, rec, data_range=max_val).item()
     print("la metrica psnr è questa ", metrics["psnr"],"   ",metrics["ms-ssim"])
     return metrics
+
+
+def evaluate_base_model(model, args,device, considered_classes = ["sketch","clipart","comic","kodak","infographics"]):
+    """
+    Valuto la bontà del modello base, di modo da poter vedere se miglioraiamo qualcosadddd
+    """
+    res = {}
+    considered_classes = args.considered_classes if considered_classes is None else considered_classes
+
+    model.to(device)
+    model.update()
+    test_transforms = transforms.Compose([transforms.ToTensor()])
+
+    for i,cl in enumerate(considered_classes):
+        print("**********************************   ",cl," *******************************************")
+        cons_classes = args.considered_classes + [cl] if cl not in args.considered_classes else considered_classes
+        txt_file = "_" + cl + "_.txt"
+        cl_class = AdapterDataset(root = args.root + "/test", 
+                              path  =  [txt_file],
+                              classes = cons_classes, 
+                              transform = test_transforms,
+                               num_element = 30,
+                              train = False) 
+        cl_class_f = cl_class.samples 
+        class_filelist = [] 
+        for i in range(len(cl_class_f)):
+            class_filelist.append(cl_class_f[i][0])
+        psnr, bpp = compress_with_ac(model, 
+                                    class_filelist,
+                                    device, -1,
+                                    loop=False, 
+                                    writing= args.writing + args.quality + "/" + cl + "_")
+        res[cl] = [bpp,psnr]
+        print(bpp," ",psnr)
+    return res

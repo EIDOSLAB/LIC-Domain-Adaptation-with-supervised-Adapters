@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from PIL import Image
 from torchvision import transforms
 import math
+from .step import compress_with_ac
 from compress.datasets import AdapterDataset
 from compressai.ops import compute_padding
 from sklearn.metrics import f1_score
@@ -458,281 +459,93 @@ def compress_with_ac_gate(model,
 
 
 
+CONSIDERED_CLASSES = ["kodak","infographics","quickdraw","comic","sketch","painting","watercolor"]
+CONSIDERED_BAMS = ["bam_comic","bam_drawing","bam_vector"]
 
-
-def evaluate_base_model_gate(model, args,device, epoch,num_adapter, oracle, train_baseline= False, writing = None,save_images = None):
+def evaluate_base_model_gate(model, 
+                             args,
+                             device, 
+                             epoch,
+                             num_adapter,
+                               oracle, 
+                               considered_classes =CONSIDERED_CLASSES,
+                               considered_bams = CONSIDERED_BAMS,
+                               train_baseline= False, 
+                               writing = None,
+                               save_images = None):
     """
     Valuto la bontà del modello base, di modo da poter vedere se miglioraiamo qualcosa
     """
-
+    
     model.to(device)
     model.update()
+    res = {}
 
     test_transforms = transforms.Compose([transforms.ToTensor()])
     
-    print("***************************************** info *************************************************")
-    if "infographics" not in args.considered_classes:
-        cons_classes = args.considered_classes + ["infographics"]
-    else:
-        cons_classes = args.considered_classes   
-    kodak = AdapterDataset(root = args.root + "/test", 
-                           path  =  ["_infographics_.txt"],
+
+    for j,cl in enumerate(considered_classes):
+        print("***************************************** ",cl," *************************************************")
+
+        if cl not in args.considered_classes:
+            cons_classes = args.considered_classes + [cl]
+        else:
+            cons_classes = args.considered_classes
+        txt_file = "_" + cl + "_.txt"   
+        classes = AdapterDataset(root = args.root + "/test", 
+                           path  =  [txt_file],
                            classes =cons_classes, 
                            num_element = 30, 
                            transform = test_transforms,
                            train = False)
-    kodak_f = kodak.samples
-    kodak_filelist = []
-    kodak_cl = [] if oracle else None
-    for i in range(len(kodak_f)):
-        kodak_filelist.append(kodak_f[i][0])
-        if oracle:
-            kodak_cl.append(int(kodak_f[i][1]))
-    psnr, bpp = compress_with_ac_gate(model, 
-                                      kodak_filelist, 
+        classes_f = classes.samples
+        classes_filelist = []
+        classes_cl = [] if oracle else None
+        for i in range(len(classes_f)):
+            classes_filelist.append(classes_f[i][0])
+            if oracle:
+                classes_cl.append(int(classes_f[i][1]))
+        psnr, bpp = compress_with_ac_gate(model, 
+                                      classes_filelist, 
                                       device,
                                       epoch,
                                       num_adapter, 
                                       loop=True, 
-                                      name= "infographics_", 
-                                      oracles = kodak_cl,  
+                                      name= classes + "_", 
+                                      oracles = classes_cl,  
                                       train_baseline= train_baseline,
                                       writing = writing,
                                        save_images=save_images )
-    print(psnr,"  ",bpp)
-    
-    print("****************************************** kodak ****************************************************************")
-    clic = AdapterDataset(root = args.root + "/test",
-                           path  =  ["_kodak_.txt"],
-                           classes = args.considered_classes,
-                             num_element = 24,
-                             transform = test_transforms,
-                             train = False)
-    clic_f = clic.samples
-    clic_filelist = []
-    clic_cl = [] if oracle else None
-    for i in range(len(clic_f)):
-        clic_filelist.append(clic_f[i][0])
-        if oracle:
-            clic_cl.append(int(clic_f[i][1]))
-    psnr, bpp = compress_with_ac_gate(model,
-                                       clic_filelist,
-                                         device,
-                                         epoch,
-                                         num_adapter,  
-                                         loop=True,
-                                           name = "kodak_", 
-                                           oracles = clic_cl,  
-                                           train_baseline= train_baseline,
-                                            writing = writing)
-    print(psnr,"  ",bpp)
+        print(psnr,"  ",bpp)
 
+        res[cl] = [bpp,psnr]
 
-
-    print("****************************************** quickdraw ****************************************************************")
-    clic = AdapterDataset(root = args.root + "/test",
-                           path  =  ["_quickdraw_.txt"],
-                           classes = args.considered_classes + ["quickdraw"],
-                             num_element = 30,
-                             transform = test_transforms,
-                             train = False)
-    clic_f = clic.samples
-    clic_filelist = []
-    clic_cl = [] if oracle else None
-    for i in range(len(clic_f)):
-        clic_filelist.append(clic_f[i][0])
-        if oracle:
-            clic_cl.append(int(clic_f[i][1]))
-    psnr, bpp = compress_with_ac_gate(model,
-                                       clic_filelist,
-                                         device,
-                                         epoch,
-                                         num_adapter,  
-                                         loop=True,
-                                           name = "quickdraw_", 
-                                           oracles = clic_cl,  
-                                           train_baseline= train_baseline,
-                                            writing = writing)
-    print(psnr,"  ",bpp)
-    
-
-    print("****************************************** comic **************************************************************4444**")
-    if "clipart" not in args.considered_classes:
-        cons_classes = args.considered_classes + ["comic"]
-    else:
-        cons_classes = args.considered_classes   
-    clipart = AdapterDataset(root = args.root + "/test", 
-                             path  =  ["_comic_.txt"],
-                             classes = args.considered_classes, 
-                             num_element = 30, 
-                             transform = test_transforms,
-                             train = False)
-    clipart_f = clipart.samples
-    clipart_filelist = []
-    clipart_cl = [] if oracle else None
-    for i in range(len(clipart_f)):
-        clipart_filelist.append(clipart_f[i][0])
-        if oracle:
-            clipart_cl.append(int(clipart_f[i][1]))
-    psnr, bpp = compress_with_ac_gate(model, 
-                                      clipart_filelist, 
-                                      device, 
-                                      epoch, 
-                                      num_adapter,
-                                      loop=True, 
-                                      name =  "comic_", 
-                                      oracles= clipart_cl, 
-                                      train_baseline= train_baseline,
-                                       writing = writing)
-    print(psnr,"  ",bpp)
-    """
-    print("****************************************** PAINTING***************************************+++*************************")
-    
-    if "painting" not in args.considered_classes:
-        cons_classes = args.considered_classes + ["painting"]
-    else:
-        cons_classes = args.considered_classes
-    painting = AdapterDataset(root = args.root + "/test", 
-                              path  =  ["_painting_.txt"],
-                              classes = cons_classes, 
-                              num_element=25,
-                              transform = test_transforms,
-                              train = False)
-    painting_f = painting.samples
-    painting_filelist = []
-    painting_cl = [] if oracle else None
-    for i in range(len(painting_f)):
-        painting_filelist.append(painting_f[i][0])
-        if oracle:
-            painting_cl.append(int(painting_f[i][1]))
-    psnr, bpp = compress_with_ac_gate(model, 
-                                      painting_filelist, 
-                                      device, 
-                                      epoch, 
-                                      num_adapter,
-                                      loop=True, 
-                                      name =  "painting_", 
-                                      oracles= painting_cl, 
-                                      train_baseline= train_baseline,
-                                       writing = writing)
-    print(psnr,"  ",bpp)
-    
-    """
-
-    print("****************************************** sketch ****************************************************************")
-    if "sketch" not in args.considered_classes:
-        cons_classes = args.considered_classes + ["sketch"]
-    else:
-        cons_classes = args.considered_classes
-    sketch = AdapterDataset(root = args.root + "/test",
-                             path  =  ["_sketch_.txt"],
-                             classes = cons_classes,
-                               num_element = 30, 
-                               transform = test_transforms)
-    sketch_f = sketch.samples
-    sketch_filelist = []
-    sketch_cl = [] if oracle else None
-    for i in range(len(sketch_f)):
-        sketch_filelist.append(sketch_f[i][0])
-        if oracle:
-            sketch_cl.append(int(sketch_f[i][1]))
-    psnr, bpp = compress_with_ac_gate(model, 
-                                      sketch_filelist, 
-                                      device, 
-                                      epoch, 
-                                      num_adapter,
-
-                                      loop=True, 
-                                      name= "sketch_",
-                                      oracles = sketch_cl, 
-                                      train_baseline= train_baseline,
-                                      writing = writing)
-    print(psnr,"  ",bpp)
-    
-    print("****************************************** water ****************************************************************")
-    if "watercolor" not in args.considered_classes:
-        cons_classes = args.considered_classes + ["watercolor"]
-    else:
-        cons_classes = args.considered_classes
-    sketch = AdapterDataset(root = args.root + "/test", path  =  ["_watercolor_.txt"],classes = cons_classes , num_element = 30, transform = test_transforms)
-    sketch_f = sketch.samples
-    sketch_filelist = []
-    sketch_cl = [] if oracle else None
-    for i in range(len(sketch_f)):
-        sketch_filelist.append(sketch_f[i][0])
-        if oracle:
-            sketch_cl.append(int(sketch_f[i][1]))
-    psnr, bpp = compress_with_ac_gate(model, 
-                                      sketch_filelist, 
-                                      device, 
-                                      epoch, 
-                                      num_adapter,
-
-                                      loop=True, 
-                                      name= "water_",
-                                      oracles = sketch_cl, 
-                                      train_baseline= train_baseline, #dddd
-                                      writing = writing)
-    print(psnr,"  ",bpp)
-
-
-    # BAMS 
-
-    bam_path = "/scratch/dataset/bam_dataset/splitting/_bam_comic_.txt" #_bam_comic_.txt"
     bam = "/scratch/dataset/bam_dataset/bam/"
-    file_d = open(bam_path,"r") 
-    Lines = file_d.readlines()
-    filelist = []
-    for i,lines in enumerate(Lines):
-        filelist.append(bam + lines[:-1])
+    for j,cl in enumerate(considered_bams):
+        print("***************************************** ",cl," *************************************************")
+        txt_file = "_" + cl + "_.txt"
+        bam_path = "/scratch/dataset/bam_dataset/splitting/" + txt_file
 
-    psnr, bpp = compress_with_ac_gate(model, 
+        file_d = open(bam_path,"r") 
+        Lines = file_d.readlines()
+        filelist = []
+        for i,lines in enumerate(Lines):
+            filelist.append(bam + lines[:-1])
+
+        psnr, bpp = compress_with_ac_gate(model, 
                                       filelist, 
                                       device, 
                                       epoch, 
                                       num_adapter,
                                       loop=True, 
-                                      name= "bam_comic_",
+                                      name= cl + "_",
                                       oracles = None, 
                                       train_baseline= train_baseline,
                                       writing = writing)
+        res[cl] = [bpp,psnr]
+    return res
     
-    bam_path = "/scratch/dataset/bam_dataset/splitting/_bam_drawing_.txt" #_bam_comic_.txt"
-    bam = "/scratch/dataset/bam_dataset/bam/"
-    file_d = open(bam_path,"r") 
-    Lines = file_d.readlines()
-    filelist = []
-    for i,lines in enumerate(Lines):
-        filelist.append(bam + lines[:-1])
-
-    psnr, bpp = compress_with_ac_gate(model, 
-                                      filelist, 
-                                      device, 
-                                      epoch, 
-                                      num_adapter,
-                                      loop=True, 
-                                      name= "bam_drawing_",
-                                      oracles = None, 
-                                      train_baseline= train_baseline,
-                                      writing = writing)
 
 
 
-    bam_path = "/scratch/dataset/bam_dataset/splitting/_bam_vector_.txt" #_bam_comic_.txt"
-    bam = "/scratch/dataset/bam_dataset/bam/"
-    file_d = open(bam_path,"r") 
-    Lines = file_d.readlines()
-    filelist = []
-    for i,lines in enumerate(Lines):
-        filelist.append(bam + lines[:-1])
 
-    psnr, bpp = compress_with_ac_gate(model, 
-                                      filelist, 
-                                      device, 
-                                      epoch, 
-                                      num_adapter,
-                                      loop=True, 
-                                      name= "bam_vector_",
-                                      oracles = None, 
-                                      train_baseline= train_baseline,
-                                      writing = writing)

@@ -35,7 +35,7 @@ def parse_args_gate(argv):
     parser = argparse.ArgumentParser(description="Example training script.")
 
 
-    parser.add_argument("-e","--epochs",default=400,type=int,help="Number of epochs (default: %(default)s)",)
+    parser.add_argument("-e","--epochs",default=400,type=int,help="Number of epochs",)
 
     parser.add_argument("--name_model", type=str,default = "WACNN", choices = ["WACNN","cheng"], help="possible models")
 
@@ -43,26 +43,26 @@ def parse_args_gate(argv):
     parser.add_argument("--root", type=str,default = "/scratch/dataset/domain_adapter/MixedImageSets", help="base root for dataset") #"/scratch/dataset/domain_adapter/MixedImageSets"
 
 
-    parser.add_argument("--considered_classes", nargs='+', type = str, default = ["natural","sketch","comic"]) # ["openimages","sketch","clipart",,"painting","infograph"] #["natural","sketch","infographics"]
-    parser.add_argument("--train_datasets", nargs='+', type = str, default = ["_natural_.txt","_sketch_.txt","_comic_.txt"]) #["_natural_.txt","_sketch_.txt","_infographics_.txt"]
+    parser.add_argument("--considered_classes", nargs='+', type = str, default = ["natural","sketch","comic"], help = "classes for training the adapters") # ["openimages","sketch","clipart",,"painting","infograph"] #["natural","sketch","infographics"]
+    parser.add_argument("--train_datasets", nargs='+', type = str, default = ["_natural_.txt","_sketch_.txt","_comic_.txt"] help = "txt files with the name of the files (must be the same of considered classes)", ) #["_natural_.txt","_sketch_.txt","_infographics_.txt"]
     parser.add_argument("--valid_datasets", nargs='+', type = str, default =["_natural_.txt","_sketch_.txt","_comic_.txt"]) # ["valid_openimages.txt","valid_sketch.txt","valid_clipart.txt","valid_painting.txt","valid_infograph.txt"] 
     parser.add_argument("--test_datasets", nargs='+', type = str, default = ["_kodak_.txt","_clic_.txt","_sketch_.txt","_comic_.txt"]) # ["test_kodak.txt","test_clic.txt","test_sketch.txt","test_clipart.txt","test_painting.txt","test_infograph.txt"] #["_kodak_.txt","_clic_.txt","_sketch_.txt","_comic_.txt","_infographics_.txt","_watercolor_.txt"]
-    parser.add_argument("--lmbda",type=float,default=0.5,help="Bit-rate distortion parameter (default: %(default)s)",)
+    parser.add_argument("--lmbda",type=float,default=0.5,help="gate-adapters distortion parameter",)
     parser.add_argument("--batch-size", type=int, default=16, help="Batch size (default: %(default)s)") 
 
-    parser.add_argument("--N",default=192,type=int,help="Number of epochs (default: %(default)s)",) 
-    parser.add_argument("--M",default=320,type=int,help="Number of epochs (default: %(default)s)",) 
+    parser.add_argument("--N",default=192,type=int,help="dimension of first latent space",) 
+    parser.add_argument("--M",default=320,type=int,help="diension of main latent space",) 
 
     parser.add_argument("--origin_model",type = str,default="base")
-    parser.add_argument("--pret_checkpoint",default = "/scratch/universal-dic/weights") # "/scratch/KD/devil2022/adapter/mixture/3_classes" /scratch/universal-dic/weights
-    parser.add_argument("--pret_checkpoint_gate",default ="none") #/scratch/KD/devil2022/gate/q6_gate.pth.tar #ddddddfff
+    parser.add_argument("--pret_checkpoint",default = "/scratch/universal-dic/weights")
+    parser.add_argument("--pret_checkpoint_gate",default ="none") 
     parser.add_argument("--patience",default=15,type=int,help="patience",)
     parser.add_argument("--patch-size",type=int,nargs=2,default=(256, 256),help="Size of the patches to be cropped (default: %(default)s)",)
     parser.add_argument("--starting_epoch",default=10000,type=int,help="starting_epoch",)
 
     parser.add_argument( "--mean", default=0.0, type=float, help="initialization mean",)
     parser.add_argument( "--std", default=0.00, type=float, help="initialization std",) #0.01 #ssss
-    parser.add_argument("--bias","-bs",action='store_true',)
+    parser.add_argument("--bias","-bs",action='store_true',help = "wheter or not inserting bias in adapters modules")
 
 
     parser.add_argument("--cuda", action="store_true", help="Use cuda")
@@ -79,7 +79,7 @@ def parse_args_gate(argv):
     parser.add_argument("--padding_attn", nargs = '+', type = int, default = [1,1,1,1,1])
     parser.add_argument("--position_attn", nargs = '+', type = str, default = ["res","res","res","res","res"])
 
-    parser.add_argument("--aggregation", default = "weighted", type = str)
+    parser.add_argument("--aggregation", default = "weighted", type = str, help = "type of aggregation policy")
 
 
     parser.add_argument("--restart_training",action="store_true")

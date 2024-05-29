@@ -170,21 +170,14 @@ class AdapterDataset(Dataset):
 
     def __init__(self, root, path=["train.txt"], transform = None, classes =  ["natural","sketch","clipart","watercolor","comic","infographics","quickdraw"], num_element = 2000, train = True):
 
-
-
-        #cont_nat, cont_sketch, cont_clip, cont_painting = 0,0,0,0 #ciaovvv
         self.classes = classes
-        self.samples =[]# [f for f in splitdir.iterdir() if f.is_file()]   
+        self.samples =[] 
         for p in path:
-
             splitdir = root + "/" + p
-
             file_d = open(splitdir,"r") 
             Lines = file_d.readlines()
-
             self.class_label = {}
             if train is True:
-                
                 for i,cl in enumerate(classes):
                     self.class_label[cl] = i
             else: 
@@ -195,13 +188,7 @@ class AdapterDataset(Dataset):
                     if cl != "natural" or cl != "openimages":
                         self.class_label[cl] = i
 
-            print("print the labels ",self.class_label)
-
-            
-
-            
-
-            
+            print("This are the labels ",self.class_label)
             for cl in list(self.class_label.keys()):
                 counter = 0
                 for i,lines in enumerate(Lines):
@@ -218,25 +205,7 @@ class AdapterDataset(Dataset):
                         else:
                             self.samples.append((ln, str(self.class_label[cl])))
                         counter +=1
-                        #if i % 10000==0:
-                        #    print(i," ", self.samples[-1])
 
-                    """
-                    if "sketch"in lines and cont_sketch < num_element: #dddd
-                        self.samples.append((lines.split(" ")[0], str(self.class_label["sketch"]))) #ssss
-                        cont_sketch +=1     
-                    if "clipart" in lines and cont_clip < num_element:
-                        self.samples.append((lines.split(" ")[0],  str(self.class_label["clipart"])))
-                        cont_clip +=1  
-                    if "painting" in lines and cont_painting < num_element:
-                        self.samples.append((lines.split(" ")[0], str(self.class_label["painting"])))
-                        cont_painting +=1
-                    """  
-
-        #shuffle(self.samples)
-
-
-        #self.samples = self.samples[:100]
 
         print("lunghezza: ",len(self.samples))
         self.transform = transform
