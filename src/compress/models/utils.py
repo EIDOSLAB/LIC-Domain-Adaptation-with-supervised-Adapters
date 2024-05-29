@@ -65,12 +65,7 @@ def from_state_dict(cls, state_dict):
 
 def get_model_for_evaluation(args,model_path,device):
     if args.model == "base":
-
-        print("attn block base method siamo in baseline")
-
         checkpoint = torch.load(model_path, map_location=device)#["state_dict"]
-
-
         if "entropy_bottleneck._quantized_cdf" in list(checkpoint.keys()):
             del checkpoint["entropy_bottleneck._offset"]
             del checkpoint["entropy_bottleneck._quantized_cdf"]
@@ -81,16 +76,9 @@ def get_model_for_evaluation(args,model_path,device):
             del checkpoint["gaussian_conditional._cdf_length"]
             del checkpoint["gaussian_conditional.scale_table"]
             
-            
-
-                
-        print("INIZIO STATE DICT")
         net = from_state_dict(models[args.model], checkpoint)
-
         net.update()
         net.to(device) 
-
-
         return net
     elif args.model == "latent":
         checkpoint = load_pretrained(torch.load(model_path, map_location=device))
@@ -125,40 +113,16 @@ def get_model_for_evaluation(args,model_path,device):
 def get_model(args,device, N = 192, M = 320 ):
 
     if args.model == "base":
-        print("attn block base method siamo in baseline")
         if args.pret_checkpoint != "none": 
-
-            print("entroa qua per la baseline!!!!")
-            #net.update(force = True)
             checkpoint = torch.load(args.pret_checkpoint, map_location=device)#["state_dict"]
-
-            """
-            if "entropy_bottleneck._quantized_cdf" in list(checkpoint.keys()):
-                del checkpoint["entropy_bottleneck._offset"]
-                del checkpoint["entropy_bottleneck._quantized_cdf"]
-                del checkpoint["entropy_bottleneck._cdf_length"]
-            if "gaussian_conditional._quantized_cdf" in list(checkpoint.keys()):
-                del checkpoint["gaussian_conditional._offset"]
-                del checkpoint["gaussian_conditional._quantized_cdf"]
-                del checkpoint["gaussian_conditional._cdf_length"]
-                del checkpoint["gaussian_conditional.scale_table"]
-            """
-            
-
-                
-            print("INIZIO STATE DICT")
             net = from_state_dict(models[args.model], checkpoint)
-
             net.update()
             net.to(device)
         else: 
             net = models[args.model](N = N ,M = M)
-
-
-
         return net
 
-    elif args.model in ("latent","rate"):
+    elif args.model in ("latent"):
 
         net = models[args.model](N = N, M = M) #, dim_adapter = args.dim_adapter)
         

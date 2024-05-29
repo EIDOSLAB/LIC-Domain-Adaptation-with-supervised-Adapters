@@ -199,13 +199,12 @@ def from_state_dict(cls, state_dict):
 def get_gate_model(args,num_adapter, device):
     pret_checkpoint = args.pret_checkpoint + "/" + args.quality + "/model.pth"
 
-    print("------> pret checkpoint ",pret_checkpoint)
+
 
     if args.name_model == "cheng":
         
         
         qual = int(args.quality[1])
-        print("la qualità è: ",qual)
         modello_base =  image_models["cheng2020-attn"](quality=qual, metric="mse", pretrained=True, progress=False)
         modello_base.update()
         modello_base.to(device)   
@@ -215,13 +214,6 @@ def get_gate_model(args,num_adapter, device):
 
         state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.9.original_model_weights.0.weight", stringa = "g_s.9.0.weight" ): v for k, v in state_dict.items()}
         state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.9.original_model_weights.0.bias", stringa = "g_s.9.0.bias" ): v for k, v in state_dict.items()}
-
-        print("**************************************************** MODELLO BASE ******************************************************")
-        print("************************************************************************************************************************")
-        for k in list(state_dict.keys()):
-            if "g_s" in k:
-                print(k)
-
 
         net = models["cheng"](N=args.N,
                                 dim_adapter_attn = args.dim_adapter_attn,
@@ -236,17 +228,8 @@ def get_gate_model(args,num_adapter, device):
                                 mean = args.mean,                              
                                 bias = True,
 
-        )
-
-        print("************************************************************************   MODELLO NUOVO *****************************************************")
-        print("***********************************************************************************************************************************************")
-        for k in list(net.state_dict().keys()):
-            if "g_s" in k:
-                print(k)
-
-        
-        
-        info = net.load_state_dict(state_dict, strict=False)
+        )        
+        _ = net.load_state_dict(state_dict, strict=False)
         net.update()
         net.to(device) 
         return net, modello_base
@@ -262,9 +245,7 @@ def get_gate_model(args,num_adapter, device):
             net.update()
             return net, net
         else:
-            if args.origin_model == "base":
-                checkpoint = torch.load(pret_checkpoint , map_location=device)#["state_dict"]
-            else:
+            if args.origin_model != "base":
                 checkpoint = torch.load(pret_checkpoint , map_location=device)#["state_dict"]
                 state_dict = checkpoint["state_dict"]
                 args_new = checkpoint["args"]
@@ -285,28 +266,15 @@ def get_gate_model(args,num_adapter, device):
                                     skipped = False
                                         ) 
                 
-
-
     
-                info = net.load_state_dict(state_dict, strict=True)
-
-
-
-                print("**************************************************  COSA C'E' NELLO STATE DICT")
-                stdict = list(net.state_dict())
-                for j,m in enumerate(list(checkpoint.keys())):
-                    if "g_s" in m:
-                        print(m == stdict[j] )
-                print("***************************************************************************************") 
+                _ = net.load_state_dict(state_dict, strict=True)
                 return net, net
+            
+            
+            checkpoint = torch.load(pret_checkpoint , map_location=device)#["state_dict"]
             modello_base = from_state_dict(models[args.origin_model], checkpoint)
             modello_base.update()
             modello_base.to(device) 
-
-
-
-
-
 
 
             net = models["gate"](N = args.N,
@@ -329,43 +297,24 @@ def get_gate_model(args,num_adapter, device):
             state_dict = modello_base.state_dict()
             #state_dict = net.state_dict()
 
-
-            if True: # args.origin_model == " base":
-                print("rinomino questo porca miseria!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-
-                state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.1.original_model_weights.weight", stringa = "g_s.1.weight" ): v for k, v in state_dict.items()}
-                state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.1.original_model_weights.bias", stringa = "g_s.1.bias" ): v for k, v in state_dict.items()}
-                state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.3.original_model_weights.weight", stringa = "g_s.3.weight" ): v for k, v in state_dict.items()}
-                state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.3.original_model_weights.bias", stringa = "g_s.3.bias" ): v for k, v in state_dict.items()}
-                state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.6.original_model_weights.weight", stringa = "g_s.6.weight" ): v for k, v in state_dict.items()}
-                state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.6.original_model_weights.bias", stringa = "g_s.6.bias" ): v for k, v in state_dict.items()}
-                state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.8.original_model_weights.weight", stringa = "g_s.8.weight" ): v for k, v in state_dict.items()}
-                state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.8.original_model_weights.bias", stringa = "g_s.8.bias" ): v for k, v in state_dict.items()}
+            state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.1.original_model_weights.weight", stringa = "g_s.1.weight" ): v for k, v in state_dict.items()}
+            state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.1.original_model_weights.bias", stringa = "g_s.1.bias" ): v for k, v in state_dict.items()}
+            state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.3.original_model_weights.weight", stringa = "g_s.3.weight" ): v for k, v in state_dict.items()}
+            state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.3.original_model_weights.bias", stringa = "g_s.3.bias" ): v for k, v in state_dict.items()}
+            state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.6.original_model_weights.weight", stringa = "g_s.6.weight" ): v for k, v in state_dict.items()}
+            state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.6.original_model_weights.bias", stringa = "g_s.6.bias" ): v for k, v in state_dict.items()}
+            state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.8.original_model_weights.weight", stringa = "g_s.8.weight" ): v for k, v in state_dict.items()}
+            state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.8.original_model_weights.bias", stringa = "g_s.8.bias" ): v for k, v in state_dict.items()}
                 
 
             if args.pret_checkpoint_gate != "none":
-                print("ENTRO QUA SE VOGLIO IL GATE PRE ALLENATO!!!!!!!!")
                 gate_dict = torch.load(args.pret_checkpoint_gate , map_location=device)["state_dict"]
                 for k in list(gate_dict.keys()):
                     if "gate." in k:
                         state_dict[k] = gate_dict[k]
-
-            print("**************************************************** MODELLO BASE ******************************************************")
-            print("************************************************************************************************************************")
-            for k in list(state_dict.keys()):
-                if "g_s" in k:
-                    print(k)
-
-            
-            print("************************************************NUOVO MODELLO***************************************")       
-            stdict = list(net.state_dict())
-            for j,m in enumerate(stdict):
-                if "g_s" in m:
-                    print(m)
                  
 
-            
-            info = net.load_state_dict(state_dict, strict=False)
+            _ = net.load_state_dict(state_dict, strict=False)
             net.to(device)
             return net, modello_base
 

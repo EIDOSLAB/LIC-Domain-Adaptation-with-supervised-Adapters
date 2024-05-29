@@ -116,13 +116,11 @@ def main(argv):
 
 
     if args.training_policy == "mse":
-        print("entro qua che c'è mse distorsion loss")
         criterion =  DistorsionLoss()
         #if args.model != "decoder":
         #    net.modify_adapter(args, device) 
         net = net.to(device)        
-    elif args.training_policy == "ratedistortion":
-        print("qua faccio la rate distortion classica")    
+    elif args.training_policy == "ratedistortion": 
         criterion = RateDistortionLoss(lmbda=args.lmbda)
 
     last_epoch = 0
@@ -160,8 +158,6 @@ def main(argv):
     print(" Ttrainable parameters prima : ",model_tr_parameters)
     print(" freeze parameters prima: ", model_fr_parameters)
 
-    #net.unfreeze_quantizer
-    #net.print_pars()
 
     epoch = 0
 
