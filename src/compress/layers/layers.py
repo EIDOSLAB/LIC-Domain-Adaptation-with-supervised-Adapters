@@ -61,7 +61,6 @@ class ResidualMultipleAdaptersDeconv(nn.Module):
                     standard_deviation = 0.00,
                     initialize = "gaussian", 
                     num_adapter = 3, 
-                    name = [], 
                     aggregation = "weighted", 
                     threshold = 0,
                     skipped = False):
@@ -86,16 +85,11 @@ class ResidualMultipleAdaptersDeconv(nn.Module):
 
         self.adapters = nn.ModuleList([]) 
         for i in range(num_adapter):
-            if len(name) == 0:
-                if i == 0 and skipped:
-                    name_ad = "adapter_skipped" + str(i)
-                else:
-                    name_ad = "adapter_" + str(i)
+            if i == 0 and skipped:
+                name_ad = "adapter_skipped" + str(i)
             else:
-                if i == 0 and skipped:
-                    name_ad = "adapter_skipped" + name[i]
-                else:
-                    name_ad = "adapter_" + name[i]
+                name_ad = "adapter_" + str(i)
+
 
 
             if skipped and i == 0:   
@@ -787,7 +781,7 @@ class ResidualAdapterDeconv(nn.Module):
 
     def initialization(self,m):
         if isinstance(m, nn.Conv2d) or isinstance(m,nn.Linear) or isinstance(m, nn.ConvTranspose2d) :
-            print("sono entrato qua per inizialissssszzare split connections E SONO QUA DENTRO CON 0")
+
             torch.nn.init.zeros_(m.weight) #nn.init.normal_(m.weight, mean=self.mean, std=self.standard_deviation)
             if m.bias is not None:
                 torch.nn.init.zeros_(m.bias)       
