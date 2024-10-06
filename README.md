@@ -13,4 +13,17 @@ In Learned Image Compression (LIC), a model is trained at encoding and decoding 
 
 
 
+### Dataset 
 
+Datasets used for training/evaluation as sored at [this link](https://drive.google.com/drive/u/0/folders/15cwEsnMxuBaEAH_h8_CnpcpRtOnXiuUQ)
+In the unzipped folder we have:
+
+
+domain_adaptation_dataset
+│  
+└──MixedImageSets
+   └───|test.xtx
+       |train.txt
+       | valid.txt    
+└───clipart
+    |____ img1.jpg ...

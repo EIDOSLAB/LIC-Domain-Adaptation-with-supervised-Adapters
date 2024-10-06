@@ -78,19 +78,13 @@ def get_gate_model(args,num_adapter, device):
 
 
     elif args.name_model == "WACNN":
-        if args.train_baseline:
-            checkpoint = torch.load(pret_checkpoint , map_location=device)
-            net = from_state_dict(models["base"], checkpoint)
-            net.to(device)
-            net.update()
-            return net, net
-        else:
-            if args.origin_model != "base":
-                checkpoint = torch.load(pret_checkpoint , map_location=device)#["state_dict"]
-                state_dict = checkpoint["state_dict"]
-                args_new = checkpoint["args"]
 
-                net = models["gate"](N = args_new.N,
+        if args.origin_model != "base":
+            checkpoint = torch.load(pret_checkpoint , map_location=device)#["state_dict"]
+            state_dict = checkpoint["state_dict"]
+            args_new = checkpoint["args"]
+
+            net = models["gate"](N = args_new.N,
                                     M =args_new.M,
                                     dim_adapter_attn = args_new.dim_adapter_attn,
                                     stride_attn = args_new.stride_attn,
@@ -107,17 +101,17 @@ def get_gate_model(args,num_adapter, device):
                                         ) 
                 
     
-                _ = net.load_state_dict(state_dict, strict=True)
-                return net, net
+            _ = net.load_state_dict(state_dict, strict=True)
+            return net, net
             
             
-            checkpoint = torch.load(pret_checkpoint , map_location=device)#["state_dict"]
-            modello_base = from_state_dict(models[args.origin_model], checkpoint)
-            modello_base.update()
-            modello_base.to(device) 
+        checkpoint = torch.load(pret_checkpoint , map_location=device)#["state_dict"]
+        modello_base = from_state_dict(models[args.origin_model], checkpoint)
+        modello_base.update()
+        modello_base.to(device) 
 
 
-            net = models["gate"](N = args.N,
+        net = models["gate"](N = args.N,
                                 M =args.M,
                                 dim_adapter_attn = args.dim_adapter_attn,
                                 stride_attn = args.stride_attn,
@@ -133,28 +127,28 @@ def get_gate_model(args,num_adapter, device):
                                 skipped = args.skipped
                                     ) 
 
-            print("entro qua parte 1")
-            state_dict = modello_base.state_dict()
-            #state_dict = net.state_dict()
+        print("entro qua parte 1")
+        state_dict = modello_base.state_dict()
+        #state_dict = net.state_dict()
 
-            state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.1.original_model_weights.weight", stringa = "g_s.1.weight" ): v for k, v in state_dict.items()}
-            state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.1.original_model_weights.bias", stringa = "g_s.1.bias" ): v for k, v in state_dict.items()}
-            state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.3.original_model_weights.weight", stringa = "g_s.3.weight" ): v for k, v in state_dict.items()}
-            state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.3.original_model_weights.bias", stringa = "g_s.3.bias" ): v for k, v in state_dict.items()}
-            state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.6.original_model_weights.weight", stringa = "g_s.6.weight" ): v for k, v in state_dict.items()}
-            state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.6.original_model_weights.bias", stringa = "g_s.6.bias" ): v for k, v in state_dict.items()}
-            state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.8.original_model_weights.weight", stringa = "g_s.8.weight" ): v for k, v in state_dict.items()}
-            state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.8.original_model_weights.bias", stringa = "g_s.8.bias" ): v for k, v in state_dict.items()}
+        state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.1.original_model_weights.weight", stringa = "g_s.1.weight" ): v for k, v in state_dict.items()}
+        state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.1.original_model_weights.bias", stringa = "g_s.1.bias" ): v for k, v in state_dict.items()}
+        state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.3.original_model_weights.weight", stringa = "g_s.3.weight" ): v for k, v in state_dict.items()}
+        state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.3.original_model_weights.bias", stringa = "g_s.3.bias" ): v for k, v in state_dict.items()}
+        state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.6.original_model_weights.weight", stringa = "g_s.6.weight" ): v for k, v in state_dict.items()}
+        state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.6.original_model_weights.bias", stringa = "g_s.6.bias" ): v for k, v in state_dict.items()}
+        state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.8.original_model_weights.weight", stringa = "g_s.8.weight" ): v for k, v in state_dict.items()}
+        state_dict = {rename_key_for_adapter(key = k, nuova_stringa = "g_s.8.original_model_weights.bias", stringa = "g_s.8.bias" ): v for k, v in state_dict.items()}
                 
 
-            if args.pret_checkpoint_gate != "none":
-                gate_dict = torch.load(args.pret_checkpoint_gate , map_location=device)["state_dict"]
-                for k in list(gate_dict.keys()):
-                    if "gate." in k:
-                        state_dict[k] = gate_dict[k]
+        if args.pret_checkpoint_gate != "none":
+            gate_dict = torch.load(args.pret_checkpoint_gate , map_location=device)["state_dict"]
+            for k in list(gate_dict.keys()):
+                if "gate." in k:
+                    state_dict[k] = gate_dict[k]
                  
 
-            _ = net.load_state_dict(state_dict, strict=False)
-            net.to(device)
-            return net, modello_base
+        _ = net.load_state_dict(state_dict, strict=False)
+        net.to(device)
+        return net, modello_base
 

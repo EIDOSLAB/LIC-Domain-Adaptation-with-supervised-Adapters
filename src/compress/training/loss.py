@@ -22,12 +22,13 @@ class GateLoss(nn.Module):
 
 
 class GateDistorsionLoss(nn.Module):
-    def __init__(self, lmbda = 0.1, policy = "e2e"):
+    def __init__(self, lmbda = 0.1, policy = "e2e", gamma = 0.5):
         super().__init__()
         self.lmbda = lmbda 
         self.gate_metric = nn.CrossEntropyLoss()
         self.dist_metric = nn.MSELoss()
         self.policy = policy
+        self.gamma = gamma
 
 
 
@@ -55,7 +56,7 @@ class GateDistorsionLoss(nn.Module):
         out["mse_loss"] = self.dist_metric(output["x_hat"], target[0])  #
         #print("mse loss is: ",out["mse_loss"],"  ",out["CrossEntropy"]," ",self.lmbda *255**2 * out["mse_loss"] )
         if self.policy == "e2e":
-            out["loss"] =   self.lmbda * 255**2 * out["mse_loss"]  + out["CrossEntropy"]
+            out["loss"] =   self.lmbda * 255**2 * out["mse_loss"]  + self.gamma*out["CrossEntropy"]
         else:
             out["loss"] =   self.lmbda * 255**2 * out["mse_loss"] 
 

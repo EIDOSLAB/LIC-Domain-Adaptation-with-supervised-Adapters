@@ -38,43 +38,15 @@ class WACNNGateAdaptive(WACNN):
         mean: float = 0.00,
         groups: int = 1,
         skipped: bool = False,
-        all_adapters = False,
+
         **kwargs
     ):
         super().__init__(N, M, **kwargs)
 
 
         self.gate = GateNetwork(in_dim= 320, mid_dim = mid_dim ,num_adapter=num_adapter)
-        self.all_adapters = all_adapters 
 
-        if self.all_adapters:
-            self.g_s = nn.Sequential(
-                Win_noShift_Attention( dim=M, num_heads=8,window_size=4,shift_size=2),  # for the attention (no change)
-                ResidualMultipleAdaptersDeconv(M, N, kernel_size=5, stride=2, num_adapter = num_adapter, skipped = skipped, aggregation= aggregation),  #deconv(M, N, kernel_size=5, stride=2),
-                GDN(N, inverse=True),
-                #deconv(N, N, kernel_size=5, stride=2), # rimettere 
-                ResidualMultipleAdaptersDeconv(N, N, kernel_size=5, stride=2, num_adapter = num_adapter, skipped = skipped, aggregation= aggregation), 
-                GDN(N, inverse=True),
-                Win_noShift_Attention_Multiple_Adapter( dim=N,num_heads=8,window_size=8,shift_size=4,
-                                            dim_adapter=dim_adapter_attn,
-                                            kernel_size = kernel_size_attn,
-                                            padding = padding_attn,
-                                            stride = stride_attn,
-                                            bias = bias,
-                                            std = std,
-                                            position = position_attn,
-                                            type_adapter = type_adapter_attn,
-                                            mean = mean, 
-                                            groups = groups,
-                                            num_adapter = num_adapter,
-                                            aggregation = aggregation
-                                            ),
-                ResidualMultipleAdaptersDeconv(N, N, kernel_size=5, stride=2, num_adapter = num_adapter, skipped = skipped, aggregation= aggregation ), #modificare lo state dictddd
-                GDN(N, inverse=True),
-                ResidualMultipleAdaptersDeconv(N, 3, kernel_size=5, stride=2, num_adapter = num_adapter, skipped = skipped, aggregation= aggregation), #modificare lo state dict
-            )
-        else:
-            self.g_s = nn.Sequential(
+        self.g_s = nn.Sequential(
                 Win_noShift_Attention( dim=M, num_heads=8,window_size=4,shift_size=2), #0  # for the attention (no change)
                 deconv(M, N, kernel_size=5, stride=2), #1
                 GDN(N, inverse=True), #2
@@ -94,9 +66,21 @@ class WACNNGateAdaptive(WACNN):
                                             num_adapter = num_adapter,
                                             aggregation = aggregation
                                             ),
-                ResidualMultipleAdaptersDeconv(N, N, kernel_size=5, stride=2, num_adapter = num_adapter, skipped = skipped, aggregation= aggregation ), #modificare lo state dictddd
+                ResidualMultipleAdaptersDeconv(N, 
+                                            N,
+                                            kernel_size=5,
+                                            stride=2,
+                                            num_adapter = num_adapter,
+                                            skipped = skipped,
+                                            aggregation= aggregation ), #modificare lo state dictddd
                 GDN(N, inverse=True),
-                ResidualMultipleAdaptersDeconv(N, 3, kernel_size=5, stride=2, num_adapter = num_adapter, skipped = skipped, aggregation= aggregation), #modificare lo state dict
+                ResidualMultipleAdaptersDeconv( N, 
+                                                3,
+                                                kernel_size=5,
+                                                stride=2, 
+                                                num_adapter = num_adapter, 
+                                                skipped = skipped,
+                                                aggregation= aggregation), #modificare lo state dict
             )
         self.length_reconstruction_decoder = len(self.g_s)
 
@@ -193,24 +177,15 @@ class WACNNGateAdaptive(WACNN):
         y_hat = torch.cat(y_hat_slices, dim=1)
         y_likelihoods = torch.cat(y_likelihood, dim=1)
 
-        if self.all_adapters:
-            for j,module in enumerate(self.g_s):
-                if j in (0,2,4,7):
+
+        for j,module in enumerate(self.g_s):
+            if j in (0,1,2,3,4,7):
                     
-                    y_hat = module(y_hat)
-                elif j in (1,3,5,6):
-                    y_hat = module(y_hat, gate_probs, oracle)
-                else: # caso finale in cui j == self.length_reconstruction_decoder -1
-                    x_hat = module(y_hat, gate_probs,oracle)
-        else:
-            for j,module in enumerate(self.g_s):
-                if j in (0,1,2,3,4,7):
-                    
-                    y_hat = module(y_hat)
-                elif j in (5,6):
-                    y_hat = module(y_hat, gate_probs, oracle)
-                else: # caso finale in cui j == self.length_reconstruction_decoder -1
-                    x_hat = module(y_hat, gate_probs,oracle)
+                y_hat = module(y_hat)
+            elif j in (5,6):
+                y_hat = module(y_hat, gate_probs, oracle)
+            else: # caso finale in cui j == self.length_reconstruction_decoder -1
+                x_hat = module(y_hat, gate_probs,oracle)
 
         return {
             "x_hat": x_hat,
