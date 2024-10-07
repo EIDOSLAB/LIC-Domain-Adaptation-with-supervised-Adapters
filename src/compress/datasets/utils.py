@@ -162,52 +162,46 @@ def  handle_dataset(args,device):
 
 
 
-
+POX_CLASSES = ["natural","sketch","clipart","watercolor","comic","infographics"]
+NAME_DESCRIPTION_FILE = "MixedImageSets"
 
 class AdapterDataset(Dataset):
 
 
 
-    def __init__(self, root, path=["train.txt"], transform = None, classes =  ["natural","sketch","clipart","watercolor","comic","infographics","quickdraw"], num_element = 2000, train = True):
+    def __init__(self, base_root, type, classes = POX_CLASSES ,transform = None  , num_element = 2000):
 
+        self.base_root = base_root
+        self.root = os.path.join(self.base_root,NAME_DESCRIPTION_FILE,type)
         self.classes = classes
         self.samples =[] 
-        for p in path:
-            splitdir = root + "/" + p
+
+        self.class_label = {}
+        for i,cl in enumerate(classes):
+            if cl in ("kodak","clic"):
+                self.class_label[cl] = 0 
+            else:
+                self.class_label[cl] = i
+
+        for cl in classes:
+            p = "_" + cl + "_.txt"
+            splitdir = self.root + "/" + p
             file_d = open(splitdir,"r") 
             Lines = file_d.readlines()
-            self.class_label = {}
-            if train is True:
-                for i,cl in enumerate(classes):
-                    self.class_label[cl] = i
-            else: 
-                self.class_label["kodak"] = 0
-                self.class_label["clic"] = 0
+            
+            
+            for i,lines in enumerate(Lines):
 
-                for i,cl in enumerate(classes):
-                    if cl != "natural" or cl != "openimages":
-                        self.class_label[cl] = i
-
-            print("This are the labels ",self.class_label)
-            for cl in list(self.class_label.keys()):
-                counter = 0
-                for i,lines in enumerate(Lines):
-
-                    spec_num_element = num_element if cl == "openimages" else num_element
-                    if cl in splitdir and counter < spec_num_element: #splitdir
-                        
-                        if  lines.split(" ")[0][-1] == '\n': #"quickdraw" in cl : #"kodak" not in cl and "clic" not in cl:
-                            ln = lines.split(" ")[0][:-1]
-                        else: 
-                            ln = lines.split(" ")[0]
-                        if "quickdraw" in splitdir: 
-                            self.samples.append(("/scratch/dataset/DomainNet/data/" + ln, str(self.class_label[cl])))
-                        else:
-                            self.samples.append((ln, str(self.class_label[cl])))
-                        counter +=1
+                if cl in splitdir and len(self.samples) < num_element: #splitdir
+                    ln = os.path.join(self.base_root,cl,lines.strip()) 
+                    #if cl not in ("kodak","clic"):
+                    #    self.samples.append((ln, str(self.class_label[cl])))
+                    #else:
+                    lnp = ln.split(" ")[0]
+                    if  os.path.isfile(lnp):
+                        self.samples.append((ln.split(" ")[0], str(self.class_label[cl])))
 
 
-        print("lunghezza: ",len(self.samples))
         self.transform = transform
 
     def __getitem__(self, index):

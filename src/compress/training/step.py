@@ -9,14 +9,10 @@ from pytorch_msssim import ms_ssim
 import math
 from compress.datasets import AdapterDataset
 
-def read_image(filepath, adapt =False):
+def read_image(filepath):
     #assert filepath.is_file()
     img = Image.open(filepath)
     
-    if adapt:
-        i =  img.size
-        i = 256, 256#i[0]//2, i[1]//2
-        img = img.resize(i)
     img = img.convert("RGB")
     return transforms.ToTensor()(img) 
 
@@ -223,9 +219,9 @@ def test_epoch(epoch, test_dataloader, model, criterion,  valid):
 from compressai.ops import compute_padding
 import os
 
-def compress_with_ac(model,  filelist, device, epoch, name = "",loop = True,  writing = None, save_images = None ):
+def compress_with_ac(model,  filelist, device, epoch, name = "",loop = True, wandb_log= True,  writing = None, save_images = None ):
     #model.update(None, device)
-    print("ho finito l'update")
+
     bpp_loss = AverageMeter()
     psnr_val = AverageMeter()
     mssim_val = AverageMeter()
@@ -233,9 +229,9 @@ def compress_with_ac(model,  filelist, device, epoch, name = "",loop = True,  wr
     
     with torch.no_grad():
         for i,d in enumerate(filelist):
-            print("------------------------------ IMAGE ----> ",d) 
 
-            x = read_image(d, adapt = False).to(device)
+
+            x = read_image(d).to(device)
 
 
             nome_immagine = d.split("/")[-1].split(".")[0]
@@ -263,17 +259,6 @@ def compress_with_ac(model,  filelist, device, epoch, name = "",loop = True,  wr
 
 
 
-            # parte la prova, devo controllare che y_hat sia sempre uguale!!!!! !!!!
-            #out = model.forward(x)
-            #y_hat_t = out["y_hat"].ravel()
-            #y_hat_comp = out_dec["y_hat"].ravel()
-            
-            #for i in range(10):
-            #    print("----> ", y_hat_t[i]," ",y_hat_comp[i],"  ",out_dec["x_hat"].shape)
-
-
-
-
 
             psnr_im = compute_psnr(x, out_dec["x_hat"])
             ms_ssim_im = compute_msssim(x, out_dec["x_hat"])
@@ -284,12 +269,6 @@ def compress_with_ac(model,  filelist, device, epoch, name = "",loop = True,  wr
             size = out_dec['x_hat'].size()
             num_pixels = size[0] * size[2] * size[3]
             bpp = sum(len(s[0]) for s in data["strings"]) * 8.0 / num_pixels#sum(len(s[0]) for s in data["strings"]) * 8.0 / num_pixels
-
-            print("la lunghezza del bpp è -----> ",sum(len(s[0]) for s in data["strings"]) * 8.0)
-            print("num_pixels-----> ",num_pixels)
-            print("bpp totale ",bpp)
-            print("bpp !augmented-----> ",(sum(len(s[0]) for s in data["strings"]) * 8.0 + 32*3) / num_pixels)
-
             
             bpp_loss.update(bpp)
 
@@ -298,15 +277,8 @@ def compress_with_ac(model,  filelist, device, epoch, name = "",loop = True,  wr
                 f=open(fls , "a+")
                 f.write("SEQUENCE "  +   nome_immagine + " BITS " +  str(bpp) + " PSNR " +  str(psnr_im)  + " MSSIM " +  str(ms_ssim_im) + "\n")
                 f.close()  
-                
-            #print("image: ",d,": ",bpp," ",compute_psnr(x, out_dec["x_hat"]))
 
-
-
-
-                    
-
-    if loop:
+    if loop and wandb_log:
         log_dict = {
              name +   "compress":epoch,
              name +   "compress/bpp_with_ac": bpp_loss.avg,
@@ -359,27 +331,25 @@ def compute_metrics( org, rec, max_val: int = 255):
     return metrics
 
 
-def evaluate_base_model(model, args,device, considered_classes = ["sketch","clipart","comic","kodak","infographics"]):
+def evaluate_base_model(model, args,device, considered_classes):
     """
     Valuto la bontà del modello base, di modo da poter vedere se miglioraiamo qualcosadddd
     """
     res = {}
-    considered_classes = args.considered_classes if considered_classes is None else considered_classes
+    
 
     model.to(device)
     model.update()
     test_transforms = transforms.Compose([transforms.ToTensor()])
 
     for i,cl in enumerate(considered_classes):
-        print("**********************************   ",cl," *******************************************")
-        cons_classes = args.considered_classes + [cl] if cl not in args.considered_classes else considered_classes
-        txt_file = "_" + cl + "_.txt"
-        cl_class = AdapterDataset(root = args.root + "/test", 
-                              path  =  [txt_file],
-                              classes = cons_classes, 
+        print("TESTING CLASS   ",cl)
+        cl_class = AdapterDataset(base_root = args.root, 
+                             type = "test",
+                              classes = [cl], 
                               transform = test_transforms,
                                num_element = 30,
-                              train = False) 
+                            ) 
         cl_class_f = cl_class.samples 
         class_filelist = [] 
         for i in range(len(cl_class_f)):
@@ -388,7 +358,8 @@ def evaluate_base_model(model, args,device, considered_classes = ["sketch","clip
                                     class_filelist,
                                     device, -1,
                                     loop=False, 
-                                    writing= args.writing + args.quality + "/" + cl + "_")
+                                    wandb_log = args.wandb_log,
+                                    writing= args.writing)
         res[cl] = [bpp,psnr]
         print(bpp," ",psnr)
     return res

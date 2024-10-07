@@ -39,7 +39,7 @@ class AverageMeter:
         self.avg = self.sum / self.count
 
 
-def train_one_epoch_gate(model, criterion, train_dataloader, optimizer,training_policy, epoch, counter, oracle, train_baseline):
+def train_one_epoch_gate(model, criterion, train_dataloader, optimizer,training_policy, epoch, counter, oracle, wandb_log):
 
 
     model.train()
@@ -73,17 +73,13 @@ def train_one_epoch_gate(model, criterion, train_dataloader, optimizer,training_
         orac = cl if oracle else None
 
         if training_policy != "gate":
-            if train_baseline:
-                out_net = model(d)#model(d, oracle = orac)
-            else:
-                out_net = model(d, oracle = orac)
+            out_net = model(d, oracle = orac)
         else:
              out_net = model.forward_gate(d)
         
-        if train_baseline is False:
-            out_criterion = criterion(out_net, (d,cl))
-        else:
-            out_criterion = criterion(out_net, d)
+
+        out_criterion = criterion(out_net, (d,cl))
+
 
         out_criterion["loss"].backward()
         optimizer.step()
@@ -93,12 +89,12 @@ def train_one_epoch_gate(model, criterion, train_dataloader, optimizer,training_
             mse_loss.update(out_criterion["mse_loss"].clone().detach())
             bpp_loss.update(out_criterion["bpp_loss"].clone().detach())
 
-        if train_baseline is False and "CrossEntropy" in list(out_criterion.keys()):
+        if "CrossEntropy" in list(out_criterion.keys()):
             gate_loss.update(out_criterion["CrossEntropy"].clone().detach())
 
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
 
-        if train_baseline is False  and "CrossEntropy" in list(out_criterion.keys()):
+        if "CrossEntropy" in list(out_criterion.keys()):
             _, predicted = torch.max(F.softmax(out_net["logits"]), 1) # predicted
             predictions.extend(predicted.cpu().numpy().tolist())
             labels.extend(cl.cpu().numpy().tolist())
@@ -106,10 +102,6 @@ def train_one_epoch_gate(model, criterion, train_dataloader, optimizer,training_
             total += cl.size(0)
             correct += (predicted == cl).sum().item()
 
-        #if aux_optimizer is not None:
-        #    aux_loss = model.aux_loss()
-        #    aux_loss.backward()
-        #    aux_optimizer.step()
 
         if i % 100 == 0:
             print(
@@ -120,56 +112,55 @@ def train_one_epoch_gate(model, criterion, train_dataloader, optimizer,training_
                 
                 f'\tMSE loss: {out_criterion["mse_loss"].item() * 255 ** 2 / 3:.3f} |'
 
-
             )
+        if wandb_log:
+            if "CrossEntropy" in list(out_criterion.keys()):
+                wandb.log({"train_batch":counter,"train_batch/crossentropy":out_criterion["CrossEntropy"].clone().detach().item(),})
 
-        if train_baseline is False  and "CrossEntropy" in list(out_criterion.keys()):
-            wandb.log({"train_batch":counter,"train_batch/crossentropy":out_criterion["CrossEntropy"].clone().detach().item(),})
 
-
-        wandb_dict = {
-            "train_batch":counter,
-            "train_batch/losses_batch":out_criterion["loss"].clone().detach().item(),
-        }
-
-        wandb.log(wandb_dict)
-
-        if training_policy != "gate":
-
-            wand_dict = {
-                "train_batch": counter,
-                "train_batch/mse":out_criterion["mse_loss"].clone().detach().item(),
-
+            wandb_dict = {
+                "train_batch":counter,
+                "train_batch/losses_batch":out_criterion["loss"].clone().detach().item(),
             }
-            wandb.log(wand_dict)
 
-    accuracy = 100 * correct / (total + 1e-6)
+            wandb.log(wandb_dict)
 
-    log_dict = {
-        "train":epoch,
-        "train/loss": loss.avg,
+            if training_policy != "gate":
 
+                wand_dict = {
+                    "train_batch": counter,
+                    "train_batch/mse":out_criterion["mse_loss"].clone().detach().item(),
 
-    }
+                }
+                wandb.log(wand_dict)
 
-    if train_baseline is False  and "CrossEntropy" in list(out_criterion.keys()):
-        wandb.log({"train":epoch,"train/crossentropy":gate_loss.avg,"train/accuracy":accuracy })
+            accuracy = 100 * correct / (total + 1e-6)
 
-    if training_policy != "gate":
-
-        log_dict = {
+            log_dict = {
             "train":epoch,
-            "train/mse": mse_loss.avg,
+            "train/loss": loss.avg,
+
+
             }
-            
-        wandb.log(log_dict)
+
+            if   "CrossEntropy" in list(out_criterion.keys()):
+                wandb.log({"train":epoch,"train/crossentropy":gate_loss.avg,"train/accuracy":accuracy })
+
+            if training_policy != "gate":
+
+                log_dict = {
+                    "train":epoch,
+                    "train/mse": mse_loss.avg,
+                    }
+                    
+                wandb.log(log_dict)
     return counter
 
 
 
 
 
-def test_epoch_gate(epoch, test_dataloader, model, criterion, training_policy, valid, oracle, train_baseline):
+def test_epoch_gate(epoch, test_dataloader, model, criterion, training_policy, valid, oracle, wandb_log):
     model.eval()
     device = next(model.parameters()).device
 
@@ -201,24 +192,17 @@ def test_epoch_gate(epoch, test_dataloader, model, criterion, training_policy, v
 
             orac = cl if oracle else None
             if training_policy != "gate":
-                if train_baseline:
-                    out_net = model(d_padded)# model(d_padded, oracle = orac)
-                else:
-                    out_net = model(d_padded, oracle = orac)
+                out_net = model(d_padded, oracle = orac)
             else:
                 out_net = model.forward_gate(d_padded)
             
             out_net["x_hat"] = F.pad(out_net["x_hat"], unpad)
 
-            if train_baseline is False:
-                out_criterion = criterion(out_net, (d,cl))
-            else:
-                out_criterion = criterion(out_net, d)
 
-
+            out_criterion = criterion(out_net, (d,cl))
 
             #if valid:
-            if train_baseline is False and "CrossEntropy" in list(out_criterion.keys()):
+            if "CrossEntropy" in list(out_criterion.keys()):
                 _, predicted = torch.max(F.softmax(out_net["logits"]), 1) # predicted
                 predictions.extend(predicted.cpu().numpy().tolist())
                 labels.extend(cl.cpu().numpy().tolist())
@@ -233,12 +217,12 @@ def test_epoch_gate(epoch, test_dataloader, model, criterion, training_policy, v
                 ms_ssim_im = -10*math.log10(1 - compute_msssim(d, out_net["x_hat"]))
                 ssim.update(ms_ssim_im)
             
-            if train_baseline is False  and "CrossEntropy" in list(out_criterion.keys()):
+            if "CrossEntropy" in list(out_criterion.keys()):
                 gate_loss.update(out_criterion["CrossEntropy"])
 
 
     accuracy = 100 * correct / (total + 1e-6)
-    if train_baseline is False  and "CrossEntropy" in list(out_criterion.keys()):
+    if "CrossEntropy" in list(out_criterion.keys()):
         f1 = f1_score(labels, predictions, average = 'weighted')
     #cm = confusion_matrix(labels, predictions)
 
@@ -262,35 +246,32 @@ def test_epoch_gate(epoch, test_dataloader, model, criterion, training_policy, v
 
         )
 
+        if wandb_log:
+            if "CrossEntropy" in list(out_criterion.keys()):
+                log_dict =  {
+                    "test":epoch,
+                    "test/accuracy":accuracy,
+                    "test/crossentropy":gate_loss.avg,
+                    "test/f1_score":f1
+                }
+                wandb.log(log_dict)
 
-        if train_baseline is False  and "CrossEntropy" in list(out_criterion.keys()):
-            log_dict =  {
+                wandb.log({
+                    "plot_test":epoch,
+                    "plot_test/conf_mat" : wandb.plot.confusion_matrix(probs=None,
+                                y_true=labels, preds=predictions,
+                                class_names=["class1","class2","class3"])})
+
+            log_dict = {
                 "test":epoch,
-                "test/accuracy":accuracy,
-                "test/crossentropy":gate_loss.avg,
-                "test/f1_score":f1
-            }
+                "test/loss": loss.avg,
+                "test/mse": mse_loss.avg,
+                "test/psnr":psnr.avg,
+                "test/ssim":ssim.avg,
+
+                
+                }
             wandb.log(log_dict)
-
-            wandb.log({
-                "plot_test":epoch,
-                "plot_test/conf_mat" : wandb.plot.confusion_matrix(probs=None,
-                            y_true=labels, preds=predictions,
-                            class_names=["class1","class2","class3"])})
-
-
-
-
-        log_dict = {
-        "test":epoch,
-        "test/loss": loss.avg,
-        "test/mse": mse_loss.avg,
-        "test/psnr":psnr.avg,
-        "test/ssim":ssim.avg,
-
-        
-        }
-        wandb.log(log_dict)
 
 
     else:
@@ -301,29 +282,30 @@ def test_epoch_gate(epoch, test_dataloader, model, criterion, training_policy, v
             f"\tMSE loss: {mse_loss.avg * 255 ** 2 / 3:.3f} |"
 
         )
-        log_dict = {
-        "valid":epoch,
-        "valid/loss": loss.avg,
-        "valid/mse": mse_loss.avg,
-        "valid/psnr":psnr.avg,
-        "valid/ssim":ssim.avg,
+        if wandb_log:
+            log_dict = {
+            "valid":epoch,
+            "valid/loss": loss.avg,
+            "valid/mse": mse_loss.avg,
+            "valid/psnr":psnr.avg,
+            "valid/ssim":ssim.avg,
 
-        }  
-        wandb.log(log_dict)
-        if train_baseline is False  and "CrossEntropy" in list(out_criterion.keys()):
-            log_dict =  {
-                "valid":epoch,
-                "valid/accuracy":accuracy,
-                "valid/crossentropy":gate_loss.avg,
-                "valid/f1_score":f1
-            }
+            }  
             wandb.log(log_dict)
+            if "CrossEntropy" in list(out_criterion.keys()):
+                log_dict =  {
+                    "valid":epoch,
+                    "valid/accuracy":accuracy,
+                    "valid/crossentropy":gate_loss.avg,
+                    "valid/f1_score":f1
+                }
+                wandb.log(log_dict)
 
             wandb.log({
-                "plot_valid":epoch,
-                "plot_valid/conf_mat" : wandb.plot.confusion_matrix(probs=None,
-                            y_true=labels, preds=predictions,
-                            class_names=["class1","class2","class3"])}) #ddd
+                    "plot_valid":epoch,
+                    "plot_valid/conf_mat" : wandb.plot.confusion_matrix(probs=None,
+                                y_true=labels, preds=predictions,
+                                class_names=["class1","class2","class3"])}) #ddd
 
     return loss.avg
 
@@ -338,7 +320,6 @@ def compress_with_ac_gate(model,
                           name = "",  
                           writing = None, 
                           oracles = None, 
-                          train_baseline = False,
                           save_images = None):
     #model.update(None, device)
     print("ho finito l'update")
@@ -367,12 +348,10 @@ def compress_with_ac_gate(model,
             pad, unpad = compute_padding(h, w, min_div=2**6)  # pad to allow 6 strides of 2
             x_padded = F.pad(x, pad, mode="constant", value=0)
 
-            if train_baseline is False:
-                data =  model.compress(x_padded)
-                out_dec = model.decompress(data["strings"], data["shape"],data["gate_values"], oracle = orac)
-            else:
-                data =  model.compress(x_padded)
-                out_dec = model.decompress(data["strings"], data["shape"])               
+
+            data =  model.compress(x_padded)
+            out_dec = model.decompress(data["strings"], data["shape"],data["gate_values"], oracle = orac)
+         
 
             out_dec["x_hat"] = F.pad(out_dec["x_hat"], unpad)
             out_dec["x_hat"].clamp_(0.,1.)  
@@ -384,12 +363,8 @@ def compress_with_ac_gate(model,
                 nome_salv = os.path.join(save_images, nome_immagine + ".png") #ssss
                 image.save(nome_salv)
 
-
-
-
-            if train_baseline is False:
-                gate_probs = F.softmax(data["gate_values"])
-                mean_softmax[i,:] = gate_probs
+            gate_probs = F.softmax(data["gate_values"])
+            mean_softmax[i,:] = gate_probs
 
 
 
@@ -421,7 +396,7 @@ def compress_with_ac_gate(model,
 
 
 
-    if train_baseline is False and num_adapter> 1:
+    if  num_adapter> 1:
         media = torch.mean(mean_softmax,dim = 0).detach().cpu()
         data = [s.item() for s in media]                 
         log_dict = {

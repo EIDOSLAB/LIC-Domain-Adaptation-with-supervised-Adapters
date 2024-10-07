@@ -22,7 +22,7 @@ class GateLoss(nn.Module):
 
 
 class GateDistorsionLoss(nn.Module):
-    def __init__(self, lmbda = 0.1, policy = "e2e", gamma = 0.5):
+    def __init__(self, lmbda = 0.1, policy = "e2e", gamma = 1):
         super().__init__()
         self.lmbda = lmbda 
         self.gate_metric = nn.CrossEntropyLoss()

@@ -43,7 +43,7 @@ from os.path import join
 def create_savepath(args,epoch,epoch_enc):
     now = datetime.now()
     date_time = now.strftime("%m%d")
-    c = join(date_time,"_lambda_",str(args.lmbda),"_epoch_",str(epoch),"_epochenc_",str(epoch_enc)).replace("/","_")
+    c = join(date_time).replace("/","_")
 
     
     c_best = join(c,"best").replace("/","_")
@@ -51,7 +51,7 @@ def create_savepath(args,epoch,epoch_enc):
     c_best = join(c_best,args.suffix).replace("/","_")
     
     
-    path =  "/data/"#args.filename
+    path =  args.savepath
     savepath = join(path,c)
     savepath_best = join(path,c_best)
     

@@ -1,0 +1,16 @@
+numpy>=1.20.0
+scipy
+matplotlib
+torch>=1.7.0
+pytorch-msssim==0.2.0
+tensorboard
+tqdm
+bd-metric
+ptflops
+compressai
+wandb 
+einops
+timm 
+ipywidgets
+pytest-gc
+Ninja

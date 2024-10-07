@@ -42,39 +42,53 @@ def main(argv):
         wandb.init(
             project='LIC-DA',
             name=f'{project_name}_seed-{args.seed}',
-            config=args
+            config=args,
+            entity="alberto-presta"
         )  
 
 
     ##########################################   INITIALIZE DATASET ####################################
     ####################################################################################################
     ####################################################################################################
-    """
+    
     train_transforms = transforms.Compose([ transforms.RandomCrop(args.patch_size), transforms.ToTensor()])
     valid_transforms = transforms.Compose([transforms.CenterCrop(args.patch_size),  transforms.ToTensor()]) #transforms.CenterCrop(args.patch_size),
     test_transforms = transforms.Compose([transforms.ToTensor()])
 
 
-    train_dataset = AdapterDataset(root = args.root + "/train", path = args.train_datasets, classes = args.considered_classes, transform= train_transforms, num_element = 4000)
+    train_dataset = AdapterDataset(base_root = args.root, # + "/train", 
+                                   type = "train",
+                                   classes = args.considered_classes, 
+                                   transform= train_transforms, 
+                                   num_element = 4000)
+    
     train_dataloader = DataLoader(train_dataset,batch_size=args.batch_size,num_workers=4,shuffle=True, pin_memory=(device == device),)
         
 
-    valid_dataset = AdapterDataset(root = args.root + "/valid", path = args.valid_datasets,classes = args.considered_classes, transform= valid_transforms,num_element = 816)
+    valid_dataset = AdapterDataset(base_root = args.root, # + "/valid", 
+                                   type = "valid",
+                                   classes = args.considered_classes,
+                                     transform= valid_transforms,
+                                     num_element = 816)
     valid_dataloader = DataLoader(valid_dataset,batch_size= args.batch_size ,num_workers=4,shuffle=False, pin_memory=(device == device),)
         
 
-    test_total_dataset = AdapterDataset(root = args.root + "/test", path  =  args.test_datasets, classes = args.considered_classes ,transform = test_transforms,num_element = 30,train = False)
+    test_total_dataset = AdapterDataset(base_root = args.root,
+                                        type = "test",
+                                         classes = args.test_classes ,
+                                         transform = test_transforms,
+                                         num_element = 30)
         
     test_total_dataloader = DataLoader(test_total_dataset,batch_size= 1,num_workers=4,shuffle=False, pin_memory=(device == device),)
-    """    
+      
     net, modello_base  = get_gate_model(args, num_adapter,device) #se voglio allenare la baseline, questo è la baseline #dd
 
-    #res_base = evaluate_base_model(modello_base,args,device)
+    res_base = evaluate_base_model(modello_base,args,device,considered_classes =args.test_classes)
 
 
 
     print("done")
-    return 0
+    
     criterion = GateDistorsionLoss(lmbda = args.lmbda)
     optimizer, _ = configure_optimizers(net, args)
     lr_scheduler =  optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", factor=0.5, patience=args.patience)
@@ -83,10 +97,16 @@ def main(argv):
     counter = 0
     best_loss = float("inf")
 
-    writing = args.writing_path 
+    args.writing = None if args.writing == "" else args.writing
 
 
     handle_trainable_pars(net,args.starting_epoch, epoch)
+    model_tr_parameters = sum(p.numel() for p in net.parameters() if p.requires_grad)
+    model_fr_parameters = sum(p.numel() for p in net.parameters() if p.requires_grad== False)
+    print(" trainable parameters: ",model_tr_parameters)
+    print(" freeze parameterss: ", model_fr_parameters)
+
+
 
     print("****************************************************************************************************************")
     print("****************************************************************************************************************")
@@ -111,9 +131,9 @@ def main(argv):
         print("adapter: ",model_fr_parameters)   
         print("**********************************  INFORMATION *****************************************************")
         net.print_information()    
-        for nn,tt in net.named_parameters():
-            if "original" in nn:
-                print(tt.requires_grad)
+        #for nn,tt in net.named_parameters():
+        #    if "original" in nn:
+        #        print(tt.requires_grad)
         
 
 
@@ -123,15 +143,15 @@ def main(argv):
         
         
         if model_tr_parameters > 0:
-            counter = train_one_epoch_gate(net, criterion, train_dataloader, optimizer,args.training_policy,epoch,counter, oracle= args.oracle,train_baseline = args.train_baseline)
+            counter = train_one_epoch_gate(net, criterion, train_dataloader, optimizer,args.training_policy,epoch,counter, oracle= args.oracle,wandb_log=  args.wandb_log)
 
-        loss_valid = test_epoch_gate(epoch, valid_dataloader, net, criterion,  args.training_policy,valid = True, oracle= args.oracle,train_baseline = args.train_baseline)
+        loss_valid = test_epoch_gate(epoch, valid_dataloader, net, criterion,  args.training_policy,valid = True, oracle= args.oracle,wandb_log=  args.wandb_log)
         lr_scheduler.step(loss_valid)
 
 
         # faccio vari test!
 
-        _ = test_epoch_gate(epoch, test_total_dataloader, net, criterion, args.training_policy,  valid = False, oracle= args.oracle,train_baseline = args.train_baseline)
+        _ = test_epoch_gate(epoch, test_total_dataloader, net, criterion, args.training_policy,  valid = False, oracle= args.oracle,wandb_log=  args.wandb_log)
         
 
         is_best = loss_valid < best_loss
@@ -170,12 +190,6 @@ def main(argv):
         print("start the part related to beta")
         
 
-        if epoch%10==0 or (is_best and epoch > 200):
-
-            net.update()
-            res_ads = evaluate_base_model_gate(net, args,device, epoch_enc,num_adapter,oracle = args.oracle, train_baseline = args.train_baseline, writing  = writing) #writing
-            epoch_enc += 1
-            
         
 
         end = time.time()
