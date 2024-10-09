@@ -36,17 +36,17 @@ base_pretrained model: put pretrained models in path_to_pretrained_model
 ## Usage
 
 ### Environment
+```bash
 conda create -n $YOUR_PY38_ENV_NAME python=3.8
 conda activate $YOUR_PY38_ENV_NAME
-
 conda install pytorch==1.11.0 torchvision==0.12.0 torchaudio==0.11.0 cudatoolkit=11.3 -c pytorch
 pip install -r requirements.txt
-
+```
 ### train 
-
+```bash
 cd src 
 
-python3 train_final.py 
+python train_final.py 
  --root path_to_dataset
  --pret_checkpoint path_to_base_checkpoint 
  --classes natural,sketch,clipart
@@ -54,4 +54,6 @@ python3 train_final.py
  --quality q6
  --savepath path_where_to_save_model
  --seed 42
+```
+
 
