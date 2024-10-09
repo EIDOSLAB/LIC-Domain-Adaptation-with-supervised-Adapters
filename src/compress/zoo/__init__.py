@@ -148,7 +148,7 @@ def get_gate_model(args,num_adapter, device):
                     state_dict[k] = gate_dict[k]
                  
 
-        _ = net.load_state_dict(state_dict, strict=False)
+        _ = net.load_state_dict(state_dict, strict=True)
         net.to(device)
         return net, modello_base
 

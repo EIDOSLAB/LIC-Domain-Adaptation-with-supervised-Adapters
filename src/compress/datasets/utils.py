@@ -184,6 +184,7 @@ class AdapterDataset(Dataset):
                 self.class_label[cl] = i
 
         for cl in classes:
+            count = 0
             p = "_" + cl + "_.txt"
             splitdir = self.root + "/" + p
             file_d = open(splitdir,"r") 
@@ -192,17 +193,25 @@ class AdapterDataset(Dataset):
             
             for i,lines in enumerate(Lines):
 
-                if cl in splitdir and len(self.samples) < num_element: #splitdir
+                if cl in splitdir and count < num_element: #splitdir
                     ln = os.path.join(self.base_root,cl,lines.strip()) 
-                    #if cl not in ("kodak","clic"):
-                    #    self.samples.append((ln, str(self.class_label[cl])))
-                    #else:
                     lnp = ln.split(" ")[0]
                     if  os.path.isfile(lnp):
                         self.samples.append((ln.split(" ")[0], str(self.class_label[cl])))
+                        count += 1
 
+        print("******* FACCIO IL CHECK ")
+        a,b,c = 0,0,0
+        for s in self.samples:
+            if s[1] == "0":
+                a+=1
+            elif s[1] == "1":
+                b+=1
+            else:
+                c+=1
+        print(a,b,c)
 
-        self.transform = transform
+        self.transform = transform#ddd
 
     def __getitem__(self, index):
 

@@ -346,14 +346,15 @@ def evaluate_base_model(model, args,device, considered_classes):
         print("TESTING CLASS   ",cl)
         cl_class = AdapterDataset(base_root = args.root, 
                              type = "test",
-                              classes = [cl], 
+                              classes = considered_classes, 
                               transform = test_transforms,
                                num_element = 30,
                             ) 
         cl_class_f = cl_class.samples 
         class_filelist = [] 
         for i in range(len(cl_class_f)):
-            class_filelist.append(cl_class_f[i][0])
+            if cl in cl_class_f[i][0]:
+                class_filelist.append(cl_class_f[i][0])
         psnr, bpp = compress_with_ac(model, 
                                     class_filelist,
                                     device, -1,
