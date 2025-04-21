@@ -1,17 +1,3 @@
-# Copyright 2020 InterDigital Communications, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 
 import sys
 import wandb
@@ -35,11 +21,6 @@ def handle_trainable_pars(net, args):
             print("entro qua per sbloccare gli adapter")
             net.freeze_net()
             net.pars_adapter(re_grad = True)
-            #net.pars_decoder(re_grad = args.unfreeze_decoder, st = args.level_dec_unfreeze)
-            #net.parse_hyperprior(  unfreeze_hsa_loop= args.unfreeze_hsa_loop, unfreeze_hsa = args.unfreeze_hsa)
-            # aggiungo l'adapter e lo sfreezo!
-            #  
-
             if args.training_policy == "rate":
                 net.pars_entropy_estimation()
         elif args.training_policy == "quantization":
@@ -92,15 +73,11 @@ def main(argv):
         factorized_configuration , gaussian_configuration = configure_latent_space_policy(args, device, baseline = True)
     else:
         factorized_configuration , gaussian_configuration = configure_latent_space_policy(args, device, baseline = False)
-    print("gaussian configuration----- -fdddguuggffxssssxxx------>: ",gaussian_configuration)
-    print("factorized configuration------>ceeccccssààcccc->: ",factorized_configuration)
     """
 
 
 
 
-
-    #lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", factor=0.3, patience=4)
 
     net = get_model(args,device)
     net = net.to(device) 
@@ -117,8 +94,6 @@ def main(argv):
 
     if args.training_policy == "mse":
         criterion =  DistorsionLoss()
-        #if args.model != "decoder":
-        #    net.modify_adapter(args, device) 
         net = net.to(device)        
     elif args.training_policy == "ratedistortion": 
         criterion = RateDistortionLoss(lmbda=args.lmbda)

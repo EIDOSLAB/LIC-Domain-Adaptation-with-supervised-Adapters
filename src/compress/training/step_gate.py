@@ -67,8 +67,6 @@ def train_one_epoch_gate(model, criterion, train_dataloader, optimizer,training_
         d = d.to(device)
         cl = cl.to(device)
         optimizer.zero_grad()
-        #if aux_optimizer is not None: #ddd
-        #    aux_optimizer.zero_grad()
 
         orac = cl if oracle else None
 

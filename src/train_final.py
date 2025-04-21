@@ -131,11 +131,6 @@ def main(argv):
         print("adapter: ",model_fr_parameters)   
         print("**********************************  INFORMATION *****************************************************")
         net.print_information()    
-        #for nn,tt in net.named_parameters():
-        #    if "original" in nn:
-        #        print(tt.requires_grad)
-        
-
 
 
 
